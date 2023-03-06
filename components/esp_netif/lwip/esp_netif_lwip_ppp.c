@@ -7,8 +7,6 @@
 
 #include "esp_netif.h"
 
-#ifdef CONFIG_ESP_NETIF_TCPIP_LWIP
-
 #include "lwip/dns.h"
 #include "netif/ppp/pppapi.h"
 #include "netif/ppp/pppos.h"
@@ -203,7 +201,7 @@ static uint32_t pppos_low_level_output(ppp_pcb *pcb, uint8_t *data, uint32_t len
 
 esp_err_t esp_netif_ppp_set_auth(esp_netif_t *netif, esp_netif_auth_type_t authtype, const char *user, const char *passwd)
 {
-    if (!_IS_NETIF_POINT2POINT_TYPE(netif, PPP_LWIP_NETIF)) {
+    if (!ESP_NETIF_IS_POINT2POINT_TYPE(netif, PPP_LWIP_NETIF)) {
         return ESP_ERR_ESP_NETIF_INVALID_PARAMS;
     }
 #if PPP_AUTH_SUPPORT
@@ -325,5 +323,3 @@ esp_err_t esp_netif_ppp_get_params(esp_netif_t *netif, esp_netif_ppp_config_t *c
     config->ppp_error_event_enabled = obj->ppp_error_event_enabled;
     return ESP_OK;
 }
-
-#endif /* CONFIG_ESP_NETIF_TCPIP_LWIP */

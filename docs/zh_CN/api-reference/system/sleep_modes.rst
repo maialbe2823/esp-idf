@@ -16,9 +16,8 @@
     .. list::
 
         - RTC 控制器
-        - RTC 外设
         :SOC_ULP_SUPPORTED: - ULP 协处理器
-        - RTC 高速内存
+        :SOC_RTC_FAST_MEM_SUPPORTED: - RTC 高速内存
         :SOC_RTC_SLOW_MEM_SUPPORTED: - RTC 低速内存
 
 Light-sleep 和 Deep-sleep 模式有多种唤醒源。这些唤醒源也可以组合在一起，此时任何一个唤醒源都可以触发唤醒。通过 API ``esp_sleep_enable_X_wakeup`` 可启用唤醒源，通过 API :cpp:func:`esp_sleep_disable_wakeup_source` 可禁用唤醒源，详见下一小节。在系统进入 Light-sleep 或 Deep-sleep 模式前，可以在任意时刻配置唤醒源。
@@ -72,7 +71,7 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
 
     可调用 :cpp:func:`esp_sleep_enable_touchpad_wakeup` 函数来启用该唤醒源。
 
-.. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+.. only:: SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP
 
     外部唤醒 (ext0)
     ^^^^^^^^^^^^^^^^^^^^^^
@@ -103,7 +102,10 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
         gpio_pullup_dis(gpio_num);
         gpio_pulldown_en(gpio_num);
 
-    .. warning:: 从睡眠模式中唤醒后，用于唤醒的 IO pad 将被配置为 RTC IO。因此在将该 pad 用作数字 GPIO 前，请调用 :cpp:func:`rtc_gpio_deinit` 函数对其进行重新配置。
+    .. warning::
+        - 使用 EXT1 唤醒源时，用于唤醒的 IO pad 将被配置为 RTC IO。因此，在将该 pad 用作数字 GPIO 之前，请调用 :cpp:func:`rtc_gpio_deinit` 函数对其进行重新配置。
+
+        - RTC 外设在默认情况下配置为断电，此时，唤醒 IO 在进入睡眠状态前将被设置为保持状态。因此，从 Light-sleep 状态唤醒芯片后，请调用 `rtc_gpio_hold_dis` 来禁用保持功能，以便对管脚进行重新配置。对于 Deep-sleep 唤醒，此问题已经在应用启动阶段解决。
 
     可调用 :cpp:func:`esp_sleep_enable_ext1_wakeup` 函数来启用此唤醒源。
 
@@ -125,11 +127,11 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
     GPIO 唤醒（仅适用于 Light-sleep 模式）
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    .. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+    .. only:: SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP
 
         除了上述 EXT0 和 EXT1 唤醒源之外，还有一种从外部唤醒 Light-sleep 模式的方法——使用函数 :cpp:func:`gpio_wakeup_enable`。启用该唤醒源后，可将每个管脚单独配置为在高电平或低电平时唤醒。EXT0 和 EXT1 唤醒源只能用于 RTC IO，但此唤醒源既可以用于 RTC IO，可也用于数字 IO。
 
-    .. only:: not SOC_PM_SUPPORT_EXT_WAKEUP
+    .. only:: not (SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP)
 
        此外，还有一种从外部唤醒 Light-sleep 模式的方法。启用该唤醒源后，可将每个管脚单独配置为在高电平或低电平时调用 :cpp:func:`gpio_wakeup_enable` 函数触发唤醒。此唤醒源既可以用于 RTC IO，可也用于数字 IO。
 
@@ -142,6 +144,14 @@ RTC 控制器中内嵌定时器，可用于在预定义的时间到达后唤醒�
 
             esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_ON);
 
+.. only:: not SOC_RTCIO_WAKE_SUPPORTED
+
+    GPIO 唤醒
+    ^^^^^^^^^^^
+
+    任何一个 IO 都可以用作外部输入管脚，将芯片从 Light-sleep 状态唤醒。调用 :cpp:func:`gpio_wakeup_enable` 函数可以将任意管脚单独配置为在高电平或低电平触发唤醒。此后，应调用 :cpp:func:`esp_sleep_enable_gpio_wakeup` 函数来启用此唤醒源。
+
+    此外，可将由 VDD3P3_RTC 电源域供电的 IO 用于芯片的 Deep-sleep 唤醒。调用 :cpp:func:`esp_deep_sleep_enable_gpio_wakeup` 函数可以配置相应的唤醒管脚和唤醒触发电平，该函数用于启用相应管脚的 Deep-sleep 唤醒功能。
 
 UART 唤醒（仅适用于 Light-sleep 模式）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -164,7 +174,7 @@ RTC 外设和内存断电
 
     如果程序中的某些值被放入 RTC 低速内存中（例如使用 ``RTC_DATA_ATTR`` 属性），RTC 低速内存将默认保持供电。如果有需要，也可以使用函数 :cpp:func:`esp_sleep_pd_config` 对其进行修改。
 
-.. only:: not SOC_RTC_SLOW_MEM_SUPPORTED
+.. only:: not SOC_RTC_SLOW_MEM_SUPPORTED and SOC_RTC_FAST_MEM_SUPPORTED
 
     {IDF_TARGET_NAME} 中只有 RTC 高速内存，因此，如果程序中的某些值被标记为 ``RTC_DATA_ATTR``、``RTC_SLOW_ATTR`` 或 ``RTC_FAST_ATTR`` 属性，那么所有这些值都将被存入 RTC 高速内存，默认情况下保持供电。如果有需要，您也可以使用函数 :cpp:func:`esp_sleep_pd_config` 对其进行修改。
 
@@ -213,7 +223,7 @@ Flash 断电
 
 一些 {IDF_TARGET_NAME} IO 在默认情况下启用内部上拉或下拉电阻。如果这些管脚在 Deep-sleep 模式下中受外部电路驱动，电流流经这些上下拉电阻时，可能会增加电流消耗。
 
-.. only:: not esp32c3
+.. only:: SOC_RTCIO_HOLD_SUPPORTED
 
     想要隔离这些管脚以避免额外的电流消耗，请调用 :cpp:func:`rtc_gpio_isolate` 函数。
 
@@ -223,7 +233,7 @@ Flash 断电
 
 	rtc_gpio_isolate(GPIO_NUM_12);
 
-.. only:: esp32c3
+.. only:: esp32c2 or esp32c3
 
     在 Deep-sleep 模式中：
         - 数字 GPIO (GPIO6 ~ 21) 处于高阻态。
@@ -247,7 +257,7 @@ UART 输出处理
 
     对于触摸传感器唤醒源，可以调用函数 :cpp:func:`esp_sleep_get_touchpad_wakeup_status` 来确认触发唤醒的触摸管脚。
 
-.. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+.. only:: SOC_PM_SUPPORT_EXT1_WAKEUP
 
     对于 ext1 唤醒源，可以调用函数 :cpp:func:`esp_sleep_get_ext1_wakeup_status` 来确认触发唤醒的触摸管脚。
 
@@ -267,7 +277,7 @@ UART 输出处理
 
     - :example:`system/deep_sleep`：如何使用 Deep-sleep 唤醒触发器和 ULP 协处理器编程。
 
-.. only:: esp32c3
+.. only:: esp32c3 or esp32c2
 
     - :example:`system/deep_sleep`：如何通过定时器触发 Deep-sleep 唤醒。
 

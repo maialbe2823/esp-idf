@@ -9,12 +9,14 @@ System API
     app_image_format
     app_trace
     esp_function_with_shared_stack
+    chip_revision
     console
     efuse
     esp_err
     esp_https_ota
     esp_event
     freertos
+    freertos_idf
     freertos_additions
     mem_alloc
     heap_debug

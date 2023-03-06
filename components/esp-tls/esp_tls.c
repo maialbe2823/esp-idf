@@ -17,6 +17,18 @@
 #include "esp_tls_private.h"
 #include "esp_tls_error_capture_internal.h"
 #include <errno.h>
+
+#if CONFIG_IDF_TARGET_LINUX
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <linux/if.h>
+#include <sys/time.h>
+
+#define ipaddr_ntoa(ipaddr)     inet_ntoa(*ipaddr)
+typedef struct in_addr ip_addr_t;
+#endif
+
 static const char *TAG = "esp-tls";
 
 #ifdef CONFIG_ESP_TLS_USING_MBEDTLS
@@ -72,6 +84,8 @@ static const char *TAG = "esp-tls";
 #else   /* ESP_TLS_USING_WOLFSSL */
 #error "No TLS stack configured"
 #endif
+
+#define ESP_TLS_DEFAULT_CONN_TIMEOUT  (10)  /*!< Default connection timeout in seconds */
 
 static esp_err_t create_ssl_handle(const char *hostname, size_t hostlen, const void *cfg, esp_tls_t *tls)
 {
@@ -168,14 +182,21 @@ static esp_err_t esp_tls_hostname_to_fd(const char *host, size_t hostlen, int po
         return ESP_ERR_ESP_TLS_CANNOT_CREATE_SOCKET;
     }
 
+#if CONFIG_LWIP_IPV4
     if (address_info->ai_family == AF_INET) {
         struct sockaddr_in *p = (struct sockaddr_in *)address_info->ai_addr;
         p->sin_port = htons(port);
         ESP_LOGD(TAG, "[sock=%d] Resolved IPv4 address: %s", *fd, ipaddr_ntoa((const ip_addr_t*)&p->sin_addr.s_addr));
         memcpy(address, p, sizeof(struct sockaddr ));
     }
+#endif
+
+#if defined(CONFIG_LWIP_IPV4) && defined(CONFIG_LWIP_IPV6)
+    else
+#endif
+
 #if CONFIG_LWIP_IPV6
-    else if (address_info->ai_family == AF_INET6) {
+    if (address_info->ai_family == AF_INET6) {
         struct sockaddr_in6 *p = (struct sockaddr_in6 *)address_info->ai_addr;
         p->sin6_port = htons(port);
         p->sin6_family = AF_INET6;
@@ -203,18 +224,22 @@ static void ms_to_timeval(int timeout_ms, struct timeval *tv)
 static esp_err_t esp_tls_set_socket_options(int fd, const esp_tls_cfg_t *cfg)
 {
     if (cfg) {
-        if (cfg->timeout_ms >= 0) {
-            struct timeval tv;
+        struct timeval tv = {};
+        if (cfg->timeout_ms > 0) {
             ms_to_timeval(cfg->timeout_ms, &tv);
-            if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
-                ESP_LOGE(TAG, "Fail to setsockopt SO_RCVTIMEO");
-                return ESP_ERR_ESP_TLS_SOCKET_SETOPT_FAILED;
-            }
-            if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) {
-                ESP_LOGE(TAG, "Fail to setsockopt SO_SNDTIMEO");
-                return ESP_ERR_ESP_TLS_SOCKET_SETOPT_FAILED;
-            }
+        } else {
+            tv.tv_sec = ESP_TLS_DEFAULT_CONN_TIMEOUT;
+            tv.tv_usec = 0;
         }
+        if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
+            ESP_LOGE(TAG, "Fail to setsockopt SO_RCVTIMEO");
+            return ESP_ERR_ESP_TLS_SOCKET_SETOPT_FAILED;
+        }
+        if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) {
+            ESP_LOGE(TAG, "Fail to setsockopt SO_SNDTIMEO");
+            return ESP_ERR_ESP_TLS_SOCKET_SETOPT_FAILED;
+        }
+
         if (cfg->keep_alive_cfg && cfg->keep_alive_cfg->keep_alive_enable) {
             int keep_alive_enable = 1;
             int keep_alive_idle = cfg->keep_alive_cfg->keep_alive_idle;
@@ -300,7 +325,7 @@ static inline esp_err_t tcp_connect(const char *host, int hostlen, int port, con
     if (connect(fd, (struct sockaddr *)&address, sizeof(struct sockaddr)) < 0) {
         if (errno == EINPROGRESS) {
             fd_set fdset;
-            struct timeval tv = { .tv_usec = 0, .tv_sec = 10 }; // Default connection timeout is 10 s
+            struct timeval tv = { .tv_usec = 0, .tv_sec = ESP_TLS_DEFAULT_CONN_TIMEOUT }; // Default connection timeout is 10 s
 
             if (cfg && cfg->non_block) {
                 // Non-blocking mode -> just return successfully at this stage
@@ -459,7 +484,9 @@ esp_err_t esp_tls_plain_tcp_connect(const char *host, int hostlen, int port, con
 
 int esp_tls_conn_new_sync(const char *hostname, int hostlen, int port, const esp_tls_cfg_t *cfg, esp_tls_t *tls)
 {
-    size_t start = xTaskGetTickCount();
+    struct timeval time = {};
+    gettimeofday(&time, NULL);
+    uint32_t start_time_ms = (time.tv_sec * 1000) + (time.tv_usec / 1000);
     while (1) {
         int ret = esp_tls_low_level_conn(hostname, hostlen, port, cfg, tls);
         if (ret == 1) {
@@ -468,9 +495,10 @@ int esp_tls_conn_new_sync(const char *hostname, int hostlen, int port, const esp
             ESP_LOGE(TAG, "Failed to open new connection");
             return -1;
         } else if (ret == 0 && cfg->timeout_ms >= 0) {
-            size_t timeout_ticks = pdMS_TO_TICKS(cfg->timeout_ms);
-            uint32_t expired = xTaskGetTickCount() - start;
-            if (expired >= timeout_ticks) {
+            gettimeofday(&time, NULL);
+            uint32_t current_time_ms = (time.tv_sec * 1000) + (time.tv_usec / 1000);
+            uint32_t elapsed_time_ms = current_time_ms - start_time_ms;
+            if (elapsed_time_ms >= cfg->timeout_ms) {
                 ESP_LOGW(TAG, "Failed to open new connection in specified timeout");
                 ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_ESP_TLS_CONNECTION_TIMEOUT);
                 return 0;

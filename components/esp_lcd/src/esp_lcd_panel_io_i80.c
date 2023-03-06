@@ -25,7 +25,7 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_rom_gpio.h"
 #include "soc/soc_caps.h"
-#include "esp_private/esp_clk.h"
+#include "clk_tree.h"
 #include "esp_memory_utils.h"
 #include "hal/dma_types.h"
 #include "hal/gpio_hal.h"
@@ -56,6 +56,7 @@ static esp_err_t lcd_i80_bus_configure_gpio(esp_lcd_i80_bus_handle_t bus, const 
 static void lcd_i80_switch_devices(lcd_panel_io_i80_t *cur_device, lcd_panel_io_i80_t *next_device);
 static void lcd_start_transaction(esp_lcd_i80_bus_t *bus, lcd_i80_trans_descriptor_t *trans_desc);
 static void lcd_default_isr_handler(void *args);
+static esp_err_t panel_io_i80_register_event_callbacks(esp_lcd_panel_io_handle_t io, const esp_lcd_panel_io_callbacks_t *cbs, void *user_ctx);
 
 struct esp_lcd_i80_bus_t {
     int bus_id;            // Bus ID, index from 0
@@ -153,7 +154,7 @@ esp_err_t esp_lcd_new_i80_bus(const esp_lcd_i80_bus_config_t *bus_config, esp_lc
     ESP_GOTO_ON_ERROR(ret, err, TAG, "select periph clock %d failed", bus_config->clk_src);
     // install interrupt service, (LCD peripheral shares the same interrupt source with Camera peripheral with different mask)
     // interrupt is disabled by default
-    int isr_flags = LCD_I80_INTR_ALLOC_FLAGS | ESP_INTR_FLAG_SHARED;
+    int isr_flags = LCD_I80_INTR_ALLOC_FLAGS | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_LOWMED;
     ret = esp_intr_alloc_intrstatus(lcd_periph_signals.buses[bus_id].irq_id, isr_flags,
                                     (uint32_t)lcd_ll_get_interrupt_status_reg(bus->hal.dev),
                                     LCD_LL_EVENT_TRANS_DONE, lcd_default_isr_handler, bus, &bus->intr);
@@ -285,6 +286,7 @@ esp_err_t esp_lcd_new_panel_io_i80(esp_lcd_i80_bus_handle_t bus, const esp_lcd_p
     i80_device->base.del = panel_io_i80_del;
     i80_device->base.tx_param = panel_io_i80_tx_param;
     i80_device->base.tx_color = panel_io_i80_tx_color;
+    i80_device->base.register_event_callbacks = panel_io_i80_register_event_callbacks;
     // we only configure the CS GPIO as output, don't connect to the peripheral signal at the moment
     // we will connect the CS GPIO to peripheral signal when switching devices in lcd_i80_switch_devices()
     if (io_config->cs_gpio_num >= 0) {
@@ -330,6 +332,20 @@ static esp_err_t panel_io_i80_del(esp_lcd_panel_io_t *io)
     vQueueDelete(i80_device->trans_queue);
     vQueueDelete(i80_device->done_queue);
     free(i80_device);
+    return ESP_OK;
+}
+
+static esp_err_t panel_io_i80_register_event_callbacks(esp_lcd_panel_io_handle_t io, const esp_lcd_panel_io_callbacks_t *cbs, void *user_ctx)
+{
+    lcd_panel_io_i80_t *i80_device = __containerof(io, lcd_panel_io_i80_t, base);
+
+    if (i80_device->on_color_trans_done != NULL) {
+        ESP_LOGW(TAG, "Callback on_color_trans_done was already set and now it was overwritten!");
+    }
+
+    i80_device->on_color_trans_done = cbs->on_color_trans_done;
+    i80_device->user_ctx = user_ctx;
+
     return ESP_OK;
 }
 
@@ -470,27 +486,23 @@ static esp_err_t panel_io_i80_tx_color(esp_lcd_panel_io_t *io, int lcd_cmd, cons
 
 static esp_err_t lcd_i80_select_periph_clock(esp_lcd_i80_bus_handle_t bus, lcd_clock_source_t clk_src)
 {
-    esp_err_t ret = ESP_OK;
+    // get clock source frequency
+    uint32_t src_clk_hz = 0;
+    ESP_RETURN_ON_ERROR(clk_tree_src_get_freq_hz((soc_module_clk_t)clk_src, CLK_TREE_SRC_FREQ_PRECISION_CACHED, &src_clk_hz),
+                        TAG, "get clock source frequency failed");
+
     // force to use integer division, as fractional division might lead to clock jitter
     lcd_ll_select_clk_src(bus->hal.dev, clk_src);
     lcd_ll_set_group_clock_coeff(bus->hal.dev, LCD_PERIPH_CLOCK_PRE_SCALE, 0, 0);
-    switch (clk_src) {
-    case LCD_CLK_SRC_PLL160M:
-        bus->resolution_hz = 160000000 / LCD_PERIPH_CLOCK_PRE_SCALE;
+
+    // save the resolution of the i80 bus
+    bus->resolution_hz = src_clk_hz / LCD_PERIPH_CLOCK_PRE_SCALE;
+    // create pm lock based on different clock source
+    // clock sources like PLL and XTAL will be turned off in light sleep
 #if CONFIG_PM_ENABLE
-        ret = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "i80_bus_lcd", &bus->pm_lock);
-        ESP_RETURN_ON_ERROR(ret, TAG, "create ESP_PM_APB_FREQ_MAX lock failed");
-        ESP_LOGD(TAG, "installed ESP_PM_APB_FREQ_MAX lock");
+    ESP_RETURN_ON_ERROR(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "i80_bus_lcd", &bus->pm_lock), TAG, "create pm lock failed");
 #endif
-        break;
-    case LCD_CLK_SRC_XTAL:
-        bus->resolution_hz = esp_clk_xtal_freq() / LCD_PERIPH_CLOCK_PRE_SCALE;
-        break;
-    default:
-        ESP_RETURN_ON_FALSE(false, ESP_ERR_NOT_SUPPORTED, TAG,  "unsupported clock source: %d", clk_src);
-        break;
-    }
-    return ret;
+    return ESP_OK;
 }
 
 static esp_err_t lcd_i80_init_dma_link(esp_lcd_i80_bus_handle_t bus)

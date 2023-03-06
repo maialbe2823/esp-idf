@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "sdkconfig.h"
 #include "soc/soc_caps.h"
+#include "soc/clk_tree_defs.h"
 #include "esp_attr.h"
 
 /**
@@ -55,8 +56,9 @@ typedef enum {
 } adc_bitwidth_t;
 
 typedef enum {
-    ADC_ULP_MODE_FSM = 1,     ///< ADC is controlled by ULP FSM
-    ADC_ULP_MODE_RISCV = 2,   ///< ADC is controlled by ULP RISCV
+    ADC_ULP_MODE_DISABLE = 0, ///< ADC ULP mode is disabled
+    ADC_ULP_MODE_FSM     = 1, ///< ADC is controlled by ULP FSM
+    ADC_ULP_MODE_RISCV   = 2, ///< ADC is controlled by ULP RISCV
 } adc_ulp_mode_t;
 
 /**
@@ -77,6 +79,14 @@ typedef enum {
     ADC_DIGI_OUTPUT_FORMAT_TYPE2,   ///< See `adc_digi_output_data_t.type2`
 } adc_digi_output_format_t;
 
+#if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
+typedef soc_periph_adc_digi_clk_src_t    adc_oneshot_clk_src_t;     ///< Clock source type of oneshot mode which uses digital controller
+typedef soc_periph_adc_digi_clk_src_t    adc_continuous_clk_src_t;  ///< Clock source type of continuous mode which uses digital controller
+#elif SOC_ADC_RTC_CTRL_SUPPORTED
+typedef soc_periph_adc_rtc_clk_src_t     adc_oneshot_clk_src_t;     ///< Clock source type of oneshot mode which uses RTC controller
+typedef soc_periph_adc_digi_clk_src_t    adc_continuous_clk_src_t;  ///< Clock source type of continuous mode which uses digital controller
+#endif
+
 /**
  * @brief ADC digital controller pattern configuration
  */
@@ -86,6 +96,25 @@ typedef struct {
     uint8_t unit;       ///< ADC unit
     uint8_t bit_width;  ///< ADC output bit width
 } adc_digi_pattern_config_t;
+
+/**
+ * @brief ADC IIR Filter ID
+ */
+typedef enum {
+    ADC_DIGI_IIR_FILTER_0,  ///< Filter 0
+    ADC_DIGI_IIR_FILTER_1,  ///< Filter 1
+} adc_digi_iir_filter_t;
+
+/**
+ * @brief IIR Filter Coefficient
+ */
+typedef enum {
+    ADC_DIGI_IIR_FILTER_COEFF_2,     ///< The filter coefficient is 2
+    ADC_DIGI_IIR_FILTER_COEFF_4,     ///< The filter coefficient is 4
+    ADC_DIGI_IIR_FILTER_COEFF_8,     ///< The filter coefficient is 8
+    ADC_DIGI_IIR_FILTER_COEFF_16,    ///< The filter coefficient is 16
+    ADC_DIGI_IIR_FILTER_COEFF_64,    ///< The filter coefficient is 64
+} adc_digi_iir_filter_coeff_t;
 
 /*---------------------------------------------------------------
                     Output Format
@@ -115,7 +144,7 @@ typedef struct {
     };
 } adc_digi_output_data_t;
 
-#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C2
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H4 || CONFIG_IDF_TARGET_ESP32C2
 /**
  * @brief ADC digital controller (DMA mode) output data format.
  *        Used to analyze the acquired ADC (DMA) data.
@@ -154,6 +183,26 @@ typedef struct {
         uint32_t val;                   /*!<Raw data value */
     };
 } adc_digi_output_data_t;
+
+#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2
+/**
+ * @brief ADC digital controller (DMA mode) output data format.
+ *        Used to analyze the acquired ADC (DMA) data.
+ */
+typedef struct {
+    union {
+        struct {
+            uint32_t data:          12; /*!<ADC real output data info. Resolution: 12 bit. */
+            uint32_t reserved12:    1;  /*!<Reserved12. */
+            uint32_t channel:       4;  /*!<ADC channel index info.
+                                            If (channel < ADC_CHANNEL_MAX), The data is valid.
+                                            If (channel > ADC_CHANNEL_MAX), The data is invalid. */
+            uint32_t reserved17_31: 15; /*!<Reserved 17-31. */
+        } type2;                        /*!<When the configured output format is 12bit. */
+        uint32_t val;                   /*!<Raw data value */
+    };
+} adc_digi_output_data_t;
+
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32S2

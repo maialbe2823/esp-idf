@@ -33,7 +33,7 @@
             default_fontsize = 16
 
             # labels of diagram nodes
-            PC [label="Personal\n Computer"];  
+            PC [label="Personal\n Computer"];
             CHIP [label="{IDF_TARGET_NAME}", width=120];
             DUMMY [shape=none, width=1]
 
@@ -71,8 +71,8 @@
         default_fontsize = 16
 
         # labels of diagram nodes
-        PC [label="Personal\nComputer"];  
-        BRIDGE [label="USB-to-UART\n Bridge"];  
+        PC [label="Personal\nComputer"];
+        BRIDGE [label="USB-to-UART\n Bridge"];
         CHIP [label="{IDF_TARGET_NAME}", width=120];
 
             # node connections
@@ -106,8 +106,8 @@
         default_fontsize = 16
 
         # labels of diagram nodes
-        PC [label="Personal\n Computer"];  
-        BRIDGE [label="USB-to-UART\n Bridge", width=180];  
+        PC [label="Personal\n Computer"];
+        BRIDGE [label="USB-to-UART\n Bridge", width=180];
         CHIP [label="{IDF_TARGET_NAME}", width=120];
         DUMMY [shape=none, width=1]
 
@@ -132,23 +132,27 @@
                 CHIP; DUMMY;
             }
     }
-    
+
 
 .. only:: SOC_USB_OTG_SUPPORTED or SOC_USB_SERIAL_JTAG_SUPPORTED
 
     使用 USB 进行烧录
     ------------------
-    
+
     {IDF_TARGET_NAME} 支持 USB 外设，无需外部 USB 至 UART 桥，即可烧录二进制文件。
 
-    {IDF_TARGET_USB_PIN_DM:default="尚未更新！", esp32c3="GPIO18", esp32s3="GPIO19", esp32s2="GPIO19"}
-    {IDF_TARGET_USB_PIN_DP:default="尚未更新！", esp32c3="GPIO19", esp32s3="GPIO20", esp32s2="GPIO20"}
-    
+    {IDF_TARGET_USB_PIN_DM:default="尚未更新！", esp32c3="GPIO18", esp32s3="GPIO19", esp32s2="GPIO19", esp32c6="GPIO12"}
+    {IDF_TARGET_USB_PIN_DP:default="尚未更新！", esp32c3="GPIO19", esp32s3="GPIO20", esp32s2="GPIO20", esp32c6="GPIO13"}
+
     {IDF_TARGET_NAME} 上的 USB 使用 **{IDF_TARGET_USB_PIN_DP}** 作为 **D+**， **{IDF_TARGET_USB_PIN_DM}** 作为 **D-**。
 
-    .. only:: SOC_USB_SERIAL_JTAG_SUPPORTED
+    .. only:: SOC_USB_SERIAL_JTAG_SUPPORTED and not esp32s3
 
         .. note:: {IDF_TARGET_NAME} 仅支持 *USB CDC and JTAG*。
+
+        首次烧录需要手动设置 {IDF_TARGET_NAME} 进入下载模式。请按住 ``BOOT`` 按钮，同时按一下 ``RESET`` 按钮。之后，松开 ``BOOT`` 按钮。
+
+    .. only:: esp32s3
 
         首次烧录需要手动设置 {IDF_TARGET_NAME} 进入下载模式。请按住 ``BOOT`` 按钮，同时按一下 ``RESET`` 按钮。之后，松开 ``BOOT`` 按钮。
 
@@ -182,7 +186,7 @@
 如需改变烧录器的波特率，请用需要的波特率代替 ``BAUD``。默认的波特率为 ``460800``。
 
 .. note::
-    
+
     如果设备不支持自动下载模式，则需要手动进入下载模式。请按住 ``BOOT`` 按钮，同时按一下 ``RESET`` 按钮。之后，松开 ``BOOT`` 按钮。
 
 在 Windows 上查看端口
@@ -243,12 +247,20 @@ macOS::
 
 现在，请使用串口终端程序，查看重置 {IDF_TARGET_NAME} 后终端上是否有输出，从而验证串口连接是否可用。
 
+.. only:: esp32c2
+
+    使用 40 MHz 的 XTAL 时，ESP32-C2 的控制台波特率默认为 115200；使用 26 MHz 的 XTAL 时，其波特率默认为 74880。
+
+.. only:: not esp32c2
+
+    {IDF_TARGET_NAME} 的控制台波特率默认为 115200。
+
 Windows 和 Linux 操作系统
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-在本示例中，我们将使用 `PuTTY SSH Client <https://www.putty.org/>`_， `PuTTY SSH Client <https://www.putty.org/>`_ 既可用于 Windows 也可用于 Linux。你也可以使用其他串口程序并设置如下的通信参数。
+在本示例中，我们将使用 `PuTTY SSH Client <https://www.putty.org/>`_， `PuTTY SSH Client <https://www.putty.org/>`_ 既可用于 Windows 也可用于 Linux。您也可以使用其他串口程序并设置如下的通信参数。
 
-运行终端，配置在上述步骤中确认的串口：波特率 = 115200，数据位 = 8，停止位 = 1，奇偶校验 = N。以下截屏分别展示了如何在 Windows 和 Linux 中配置串口和上述通信参数（如 115200-8-1-N）。注意，这里一定要选择在上述步骤中确认的串口进行配置。
+运行终端，配置在上述步骤中确认的串口：波特率 = 115200（如有需要，请更改为使用芯片的默认波特率），数据位 = 8，停止位 = 1，奇偶校验 = N。以下截屏分别展示了如何在 Windows 和 Linux 中配置串口和上述通信参数（如 115200-8-1-N）。注意，这里一定要选择在上述步骤中确认的串口进行配置。
 
 .. figure:: ../../_static/putty-settings-windows.png
     :align: center
@@ -283,7 +295,7 @@ macOS 提供了 **屏幕** 命令，因此您不用安装串口终端程序。
 
     /dev/cu.Bluetooth-Incoming-Port /dev/cu.SLAB_USBtoUART      /dev/cu.SLAB_USBtoUART7
 
-- 根据您连接到电脑上的开发板类型和数量，输出结果会有所不同。请选择开发板的设备名称，并运行以下命令::
+- 根据您连接到电脑上的开发板类型和数量，输出结果会有所不同。请选择开发板的设备名称，并运行以下命令（如有需要，请将“115200”更改为使用芯片的默认波特率）::
 
     screen /dev/cu.device_name 115200
 

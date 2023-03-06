@@ -490,14 +490,7 @@ esp_err_t esp_intr_alloc_intrstatus(int source, int flags, uint32_t intrstatusre
     //ToDo: if we are to allow placing interrupt handlers into the 0x400c0000—0x400c2000 region,
     //we need to make sure the interrupt is connected to the CPU0.
     //CPU1 does not have access to the RTC fast memory through this region.
-    if ((flags & ESP_INTR_FLAG_IRAM)
-         && handler
-         && !esp_ptr_in_iram(handler)
-#if SOC_RTC_FAST_MEM_SUPPORTED
-        // IDF-3901.
-         && !esp_ptr_in_rtc_iram_fast(handler)
-#endif
-         ) {
+    if ((flags & ESP_INTR_FLAG_IRAM) && handler && !esp_ptr_in_iram(handler) && !esp_ptr_in_rtc_iram_fast(handler)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -753,6 +746,8 @@ esp_err_t esp_intr_free(intr_handle_t handle)
         //we save.(We can also not use the same exit path for empty shared ints anymore if we delete
         //the desc.) For now, just mark it as free.
         handle->vector_desc->flags &= ~(VECDESC_FL_NONSHARED|VECDESC_FL_RESERVED|VECDESC_FL_SHARED);
+        handle->vector_desc->source = ETS_INTERNAL_UNUSED_INTR_SOURCE;
+
         //Also kill non_iram mask bit.
         non_iram_int_mask[handle->vector_desc->cpu] &= ~(1<<(handle->vector_desc->intno));
     }
@@ -801,6 +796,7 @@ esp_err_t IRAM_ATTR esp_intr_enable(intr_handle_t handle)
     } else {
         //Re-enable using cpu int ena reg
         if (handle->vector_desc->cpu != esp_cpu_get_core_id()) {
+            portEXIT_CRITICAL_SAFE(&spinlock);
             return ESP_ERR_INVALID_ARG; //Can only enable these ints on this cpu
         }
         ESP_INTR_ENABLE(handle->vector_desc->intno);

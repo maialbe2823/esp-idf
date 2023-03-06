@@ -78,7 +78,7 @@ int hostapd_send_eapol(const u8 *source, const u8 *sta_addr,
     struct l2_ethhdr *eth = buffer;
 
     if (!buffer){
-        wpa_printf( MSG_DEBUG, "send_eapol, buffer=%p\n", buffer);
+        wpa_printf( MSG_DEBUG, "send_eapol, buffer=%p", buffer);
         return -1;
     }
 
@@ -91,6 +91,15 @@ int hostapd_send_eapol(const u8 *source, const u8 *sta_addr,
     os_free(buffer);
     return 0;
 
+}
+
+void wpa_supplicant_transition_disable(void *sm, u8 bitmap)
+{
+    wpa_printf(MSG_DEBUG, "TRANSITION_DISABLE %02x", bitmap);
+
+    if (bitmap & TRANSITION_DISABLE_WPA3_PERSONAL) {
+        esp_wifi_sta_disable_wpa2_authmode_internal();
+    }
 }
 
 u8 *wpa_sm_alloc_eapol(struct wpa_sm *sm, u8 type,
@@ -107,11 +116,10 @@ void wpa_sm_free_eapol(u8 *buffer)
 
 void  wpa_sm_deauthenticate(struct wpa_sm *sm, u8 reason_code)
 {
-
     /*only need send deauth frame when associated*/
     if (WPA_SM_STATE(sm) >= WPA_ASSOCIATED) {
         pmksa_cache_clear_current(sm);
-        sm->wpa_deauthenticate(reason_code);
+        wpa_deauthenticate(reason_code);
     }
 }
 

@@ -7,7 +7,7 @@ SPI Master driver is a program that controls {IDF_TARGET_NAME}'s SPI peripherals
 Overview of {IDF_TARGET_NAME}'s SPI peripherals
 -----------------------------------------------
 
-{IDF_TARGET_MAX_PERIPH_NUM:default="4", esp32c3="3", esp32c2="3"}
+{IDF_TARGET_MAX_PERIPH_NUM:default="4", esp32c3="3", esp32c2="3", esp32c6="3", esp32h2="3"}
 {IDF_TARGET_SPI2_CS_NUM:default="6", esp32="3"}
 {IDF_TARGET_SPI3_CS_NUM:default="3"}
 
@@ -32,7 +32,7 @@ Overview of {IDF_TARGET_NAME}'s SPI peripherals
 
     - SPI2 and SPI3 are general purpose SPI controllers. They are open to users. SPI2 and SPI3 have independent signal buses with the same respective names. SPI2 has {IDF_TARGET_SPI2_CS_NUM} CS lines. SPI3 has {IDF_TARGET_SPI3_CS_NUM} CS lines.  Each CS line can be used to drive one SPI slave.
 
-.. only:: esp32c3 or esp32c2
+.. only:: esp32c3 or esp32c2 or esp32c6 or esp32h2
 
     - SPI2 is a general purpose SPI controller. It has an independent signal bus with the same name. The bus has {IDF_TARGET_SPI2_CS_NUM} CS lines to drive up to {IDF_TARGET_SPI2_CS_NUM} SPI slaves.
 
@@ -78,7 +78,7 @@ The SPI master driver governs communications of Hosts with Devices. The driver s
 
     The SPI master driver has the concept of multiple Devices connected to a single bus (sharing a single {IDF_TARGET_NAME} SPI peripheral). As long as each Device is accessed by only one task, the driver is thread safe. However, if multiple tasks try to access the same SPI Device, the driver is **not thread-safe**. In this case, it is recommended to either:
 
-    - Refactor your application so that each SPI peripheral is only accessed by a single task at a time.
+    - Refactor your application so that each SPI peripheral is only accessed by a single task at a time. You can use :cpp:member:`spi_bus_config_t::isr_cpu_id` to register the SPI ISR to the same core as SPI peripheral related tasks to ensure thread safety.
     - Add a mutex lock around the shared Device using :c:macro:`xSemaphoreCreateMutex`.
 
 .. toctree::
@@ -98,8 +98,8 @@ Phase           Description
 ==============  =========================================================================================================
 **Command**     In this phase, a command (0-16 bit) is written to the bus by the Host.
 **Address**     In this phase, an address (0-{IDF_TARGET_ADDR_LEN} bit) is transmitted over the bus by the Host.
-**Write**       Host sends data to a Device. This data follows the optional command and address phases and is indistinguishable from them at the electrical level.
 **Dummy**       This phase is configurable and is used to meet the timing requirements.
+**Write**       Host sends data to a Device. This data follows the optional command and address phases and is indistinguishable from them at the electrical level.
 **Read**        Device sends data to its Host.
 ==============  =========================================================================================================
 
@@ -230,7 +230,7 @@ If using more than one data lines to transmit, please set `SPI_DEVICE_HALFDUPLEX
 
         Half-duplex transactions with both read and write phases are not supported when using DMA. For details and workarounds, see :ref:`spi_known_issues`.
 
-.. only:: esp32s3 or esp32c3 or esp32c2
+.. only:: esp32s3 or esp32c3 or esp32c2 or esp32c6 or esp32h2
 
     .. note::
 
@@ -385,8 +385,10 @@ To have better control of the calling sequence of functions, send mixed transact
     Please also see the example :example:`peripherals/spi_master/hd_eeprom`.
 
 
-    GPIO Matrix and IO_MUX
-    ----------------------
+GPIO Matrix and IO_MUX
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. only:: esp32
 
     Most of ESP32's peripheral signals have direct connection to their dedicated IO_MUX pins. However, the signals can also be routed to any other available pins using the less direct GPIO matrix. If at least one signal is routed through the GPIO matrix, then all signals will be routed through it.
 
@@ -406,7 +408,7 @@ To have better control of the calling sequence of functions, send mixed transact
     +          +------+------+
     |          | GPIO Number |
     +==========+======+======+
-    | CS0*     | 15   | 5    |
+    | CS0 [1]_ | 15   | 5    |
     +----------+------+------+
     | SCLK     | 14   | 18   |
     +----------+------+------+
@@ -419,8 +421,41 @@ To have better control of the calling sequence of functions, send mixed transact
     | QUADHD   | 4    | 21   |
     +----------+------+------+
 
-    \* Only the first Device attached to the bus can use the CS0 pin.
+.. only:: not esp32
 
+    {IDF_TARGET_SPI2_IOMUX_PIN_CS:default="N/A",   esp32s2="10", esp32s3="10", esp32c2="10", esp32c3="10", esp32c6="16", esp32h2="1"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_CLK:default="N/A",  esp32s2="12", esp32s3="12", esp32c2="6",  esp32c3="6",  esp32c6="6",  esp32h2="4"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_MOSI:default="N/A", esp32s2="11"  esp32s3="11", esp32c2="7"   esp32c3="7",  esp32c6="7",  esp32h2="5"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_MISO:default="N/A", esp32s2="13"  esp32s3="13", esp32c2="2"   esp32c3="2",  esp32c6="2",  esp32h2="0"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_HD:default="N/A",   esp32s2="9"   esp32s3="9",  esp32c2="4"   esp32c3="4",  esp32c6="4",  esp32h2="3"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_WP:default="N/A",   esp32s2="14"  esp32s3="14", esp32c2="5"   esp32c3="5",  esp32c6="5",  esp32h2="2"}
+
+    Most of chip's peripheral signals have direct connection to their dedicated IO_MUX pins. However, the signals can also be routed to any other available pins using the less direct GPIO matrix. If at least one signal is routed through the GPIO matrix, then all signals will be routed through it.
+
+    When an SPI Host is set to 80MHz or lower frequencies, routing SPI pins via GPIO matrix will behave the same comparing to routing them via IOMUX.
+
+    The IO_MUX pins for SPI buses are given below.
+
+    .. list-table::
+       :widths: 40 30
+       :header-rows: 1
+
+       * - Pin Name
+         - GPIO Number (SPI2)
+       * - CS0 [1]_
+         - {IDF_TARGET_SPI2_IOMUX_PIN_CS}
+       * - SCLK
+         - {IDF_TARGET_SPI2_IOMUX_PIN_CLK}
+       * - MISO
+         - {IDF_TARGET_SPI2_IOMUX_PIN_MISO}
+       * - MOSI
+         - {IDF_TARGET_SPI2_IOMUX_PIN_MOSI}
+       * - QUADWP
+         - {IDF_TARGET_SPI2_IOMUX_PIN_WP}
+       * - QUADHD
+         - {IDF_TARGET_SPI2_IOMUX_PIN_HD}
+
+.. [1] Only the first Device attached to the bus can use the CS0 pin.
 
 .. _speed_considerations:
 
@@ -439,10 +474,10 @@ The main parameter that determines the transfer speed for large transactions is 
 Transaction Duration
 ^^^^^^^^^^^^^^^^^^^^
 
-{IDF_TARGET_TRANS_TIME_INTR_DMA:default="28", esp32="28", esp32s2="23", esp32c3="28", esp32s3="26", esp32c2="42"}
-{IDF_TARGET_TRANS_TIME_POLL_DMA:default="10", esp32="10", esp32s2="9", esp32c3="10", esp32s3="11", esp32c2="17"}
-{IDF_TARGET_TRANS_TIME_INTR_CPU:default="25", esp32="25", esp32s2="22", esp32c3="27", esp32s3="24", esp32c2="40"}
-{IDF_TARGET_TRANS_TIME_POLL_CPU:default="8", esp32="8", esp32s2="8", esp32c3="9", esp32s3="9", esp32c2="15"}
+{IDF_TARGET_TRANS_TIME_INTR_DMA:default="N/A", esp32="28", esp32s2="23", esp32c3="28", esp32s3="26", esp32c2="42", esp32c6="34", esp32h2="58"}
+{IDF_TARGET_TRANS_TIME_POLL_DMA:default="N/A", esp32="10", esp32s2="9",  esp32c3="10", esp32s3="11", esp32c2="17", esp32c6="17", esp32h2="28"}
+{IDF_TARGET_TRANS_TIME_INTR_CPU:default="N/A", esp32="25", esp32s2="22", esp32c3="27", esp32s3="24", esp32c2="40", esp32c6="32", esp32h2="54"}
+{IDF_TARGET_TRANS_TIME_POLL_CPU:default="N/A", esp32="8",  esp32s2="8",  esp32c3="9",  esp32s3="9",  esp32c2="15", esp32c6="15", esp32h2="24"}
 
 Transaction duration includes setting up SPI peripheral registers, copying data to FIFOs or setting up DMA links, and the time for SPI transaction.
 
@@ -462,7 +497,40 @@ Typical transaction duration for one byte of data are given below.
 SPI Clock Frequency
 ^^^^^^^^^^^^^^^^^^^
 
-Transferring each byte takes eight times the clock period *8/fspi*.
+Clock source of the GPSPI peripherals can be selected by setting :cpp:member:`spi_device_handle_t::cfg::clock_source`. You can refer to :cpp:type:`spi_clock_source_t` to know the supported clock sources.
+By default driver will set :cpp:member:`spi_device_handle_t::cfg::clock_source` to `SPI_CLK_SRC_DEFAULT`. This usually stands for the highest frequency among GPSPI clock sources. Its value will be different among chips.
+
+Actual clock frequency of a device may not be exactly equal to the number you set, it will be re-calculated by the driver to the nearest hardware compatible number, and not larger than the clock frequency of the clock source. You can call :cpp:func:`spi_device_get_actual_freq` to know the actual frequency computed by the driver.
+
+Theoretical maximum transfer speed of Write or Read phase can be calculated according to the table below:
+
+.. only:: not SOC_SPI_SUPPORT_OCT
+
+    +--------------------------------+------------------------+
+    | Line Width of Write/Read phase |      Speed (Bps)       |
+    +================================+========================+
+    |            1-Line              |  *SPI Frequency / 8*   |
+    +--------------------------------+------------------------+
+    |            2-Line              |  *SPI Frequency / 4*   |
+    +--------------------------------+------------------------+
+    |            4-Line              |  *SPI Frequency / 2*   |
+    +--------------------------------+------------------------+
+
+.. only:: SOC_SPI_SUPPORT_OCT
+
+    +--------------------------------+------------------------+
+    | Line Width of Write/Read phase |      Speed (Bps)       |
+    +================================+========================+
+    |            1-Line              |  *SPI Frequency / 8*   |
+    +--------------------------------+------------------------+
+    |            2-Line              |  *SPI Frequency / 4*   |
+    +--------------------------------+------------------------+
+    |            4-Line              |  *SPI Frequency / 2*   |
+    +--------------------------------+------------------------+
+    |            8-Line              |  *SPI Frequency*       |
+    +--------------------------------+------------------------+
+
+The transfer speed calculation of other phases(command, address, dummy) are similar.
 
 .. only:: esp32
 
@@ -472,6 +540,10 @@ Cache Miss
 ^^^^^^^^^^
 
 The default config puts only the ISR into the IRAM. Other SPI related functions, including the driver itself and the callback, might suffer from cache misses and will need to wait until the code is read from flash. Select :ref:`CONFIG_SPI_MASTER_IN_IRAM` to put the whole SPI driver into IRAM and put the entire callback(s) and its callee functions into IRAM to prevent cache misses.
+
+.. note::
+
+    SPI driver implementation is based on FreeRTOS APIs, to use :ref:`CONFIG_SPI_MASTER_IN_IRAM`, you should not enable :ref:`CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH`.
 
 For an interrupt transaction, the overall cost is *20+8n/Fspi[MHz]* [us] for n bytes transferred in one transaction. Hence, the transferring speed is: *n/(20+8n/Fspi)*. An example of transferring speed at 8 MHz clock speed is given in the following table.
 

@@ -67,20 +67,40 @@ void esp_mpi_interrupt_clear( void )
    these additional words will be zeroed in the memory buffer.
 
 */
+
+/* Please see detailed note inside the function body below.
+ * Relevant: IDF-6029
+             https://github.com/espressif/esp-idf/issues/8710
+             https://github.com/espressif/esp-idf/issues/10403
+ */
 static inline void mpi_to_mem_block(uint32_t mem_base, const mbedtls_mpi *mpi, size_t hw_words)
 {
-    uint32_t *pbase = (uint32_t *)mem_base;
     uint32_t copy_words = MIN(hw_words, mpi->MBEDTLS_PRIVATE(n));
 
     /* Copy MPI data to memory block registers */
     for (uint32_t i = 0; i < copy_words; i++) {
-        pbase[i] = mpi->MBEDTLS_PRIVATE(p[i]);
+        DPORT_REG_WRITE(mem_base + i * 4, mpi->MBEDTLS_PRIVATE(p[i]));
     }
 
     /* Zero any remaining memory block data */
     for (uint32_t i = copy_words; i < hw_words; i++) {
-        pbase[i] = 0;
+        DPORT_REG_WRITE(mem_base + i * 4, 0);
     }
+
+#if _INTERNAL_DEBUG_PURPOSE
+    /*
+     * With Xtensa GCC 11.2.0 (from ESP-IDF v5.x), it was observed that above zero initialization
+     * loop gets optimized to `memset` call from the ROM library. This was causing an issue that
+     * specific write (store) operation to the MPI peripheral block was getting lost erroneously.
+     * Following data re-verify loop could catch it during runtime.
+     *
+     * As a workaround, we are using DPORT_WRITE_REG (volatile writes) wrappers to write to
+     * the MPI peripheral.
+     *
+     */
+
+    //for (uint32_t i = copy_words; i < hw_words; i++) { assert(pbase[i] == 0); }
+#endif
 }
 
 /* Read mbedTLS MPI bignum back from hardware memory block.

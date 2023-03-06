@@ -10,14 +10,19 @@ else()
     set(ldfragments "linker.lf")
 endif()
 
-if(IDF_TARGET STREQUAL "esp32h2")
+if(CONFIG_SOC_IEEE802154_BLE_ONLY)
     list(APPEND srcs "src/phy_init_esp32hxx.c")
 else()
     list(APPEND srcs "src/phy_init.c")
 endif()
 
+if(CONFIG_SOC_BT_SUPPORTED OR CONFIG_SOC_IEEE802154_SUPPORTED OR CONFIG_SOC_IEEE802154_BLE_ONLY)
+    list(APPEND srcs "src/btbb_init.c")
+endif()
+
 idf_build_get_property(build_dir BUILD_DIR)
 
+if(CONFIG_SOC_WIFI_SUPPORTED)
 if(CONFIG_ESP_PHY_MULTIPLE_INIT_DATA_BIN)
     if(NOT EXISTS "${build_dir}/phy_multiple_init_data.bin")
         file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${idf_target}/phy_multiple_init_data.bin DESTINATION "${build_dir}")
@@ -26,6 +31,7 @@ endif()
 
 if(CONFIG_ESP_PHY_MULTIPLE_INIT_DATA_BIN_EMBED)
     set(embed_files "${build_dir}/phy_multiple_init_data.bin")
+endif()
 endif()
 
 # [refactor-todo]: requires "driver" component for periph_ctrl header file
@@ -37,15 +43,17 @@ idf_component_register(SRCS "${srcs}"
                     )
 
 set(target_name "${idf_target}")
-if(IDF_TARGET STREQUAL "esp32h2")
-    if(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_2)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC "-L \"${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}/rev2\"")
+if(IDF_TARGET STREQUAL "esp32h4")
+    if(CONFIG_IDF_TARGET_ESP32H4_BETA_VERSION_2)
+        # TODO: rename esp32h2 to esp32h4 [WIFI-4956]
+        target_link_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/esp32h2/rev2")
     endif()
-    if(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_1)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC "-L \"${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}/rev1\"")
+    if(CONFIG_IDF_TARGET_ESP32H4_BETA_VERSION_1)
+        # TODO: rename esp32h2 to esp32h4 [WIFI-4956]
+        target_link_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/esp32h2/rev1")
     endif()
 else()
-    target_link_libraries(${COMPONENT_LIB} PUBLIC "-L \"${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}\"")
+    target_link_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lib/${target_name}")
 endif()
 
 # Override functions in PHY lib with the functions in 'phy_override.c'
@@ -60,15 +68,10 @@ if(link_binary_libs)
         target_link_libraries(${COMPONENT_LIB} PUBLIC rtc)
         target_link_libraries(${COMPONENT_LIB} INTERFACE $<TARGET_FILE:${esp_phy_lib}> libphy.a librtc.a
         $<TARGET_FILE:${esp_phy_lib}>)
-    endif()
-
-    if(CONFIG_IDF_TARGET_ESP32S2)
+    elseif(CONFIG_IDF_TARGET_ESP32S2)
         target_link_libraries(${COMPONENT_LIB} INTERFACE $<TARGET_FILE:${esp_phy_lib}> libphy.a
         $<TARGET_FILE:${esp_phy_lib}>)
-    endif()
-
-    if(CONFIG_IDF_TARGET_ESP32C3 OR CONFIG_IDF_TARGET_ESP32S3
-        OR CONFIG_IDF_TARGET_ESP32H2 OR CONFIG_IDF_TARGET_ESP32C2)
+    elseif(CONFIG_SOC_BT_SUPPORTED OR CONFIG_SOC_IEEE802154_SUPPORTED)
         target_link_libraries(${COMPONENT_LIB} PUBLIC btbb)
         target_link_libraries(${COMPONENT_LIB} INTERFACE $<TARGET_FILE:${esp_phy_lib}> libphy.a libbtbb.a
         $<TARGET_FILE:${esp_phy_lib}>)

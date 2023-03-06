@@ -28,7 +28,7 @@ The following features are supported:
     - Station-only mode, AP-only mode, station/AP-coexistence mode
     - IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, and APIs to configure the protocol mode
     - WPA/WPA2/WPA3/WPA2-Enterprise/WPA3-Enterprise/WPS and DPP
-    - AMSDU, AMPDU, QoS, and other key features
+    - AMPDU, QoS, and other key features
     - Modem-sleep
     - Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
     - Sniffer
@@ -265,6 +265,11 @@ WIFI_EVENT_STA_BEACON_TIMEOUT
 ++++++++++++++++++++++++++++++++++++
 
 If the station does not receive the beacon of the connected AP within the inactive time, the beacon timeout happens, the `WIFI_EVENT_STA_BEACON_TIMEOUT`_ will arise. The application can set inactive time via API :cpp:func:`esp_wifi_set_inactive_time()`.
+
+WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The `WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START`_ will arise at the start of connectionless module `Interval`. See :ref:`connectionless module power save <connectionless-module-power-save>`.
 
 {IDF_TARGET_NAME} Wi-Fi Station General Scenario
 ------------------------------------------------
@@ -508,7 +513,7 @@ The scan type and other per-scan attributes are configured by :cpp:func:`esp_wif
        - min=0, max>0: scan dwells on each channel for ``max`` ms.
        - min>0, max>0: the minimum time the scan dwells on each channel is ``min`` ms. If no AP is found during this time frame, the scan switches to the next channel. Otherwise, the scan dwells on the channel for ``max`` ms.
 
-       If you want to improve the performance of the the scan, you can try to modify these two parameters.
+       If you want to improve the performance of the scan, you can try to modify these two parameters.
 
 
 There are also some global scan attributes which are configured by API :cpp:func:`esp_wifi_set_config()`, refer to `Station Basic Configuration`_
@@ -767,7 +772,7 @@ Four-way Handshake Phase
 Wi-Fi Reason Code
 +++++++++++++++++++++
 
-The table below shows the reason code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in esp_wifi_types.h. The common prefix *WIFI_REASON* is removed, which means that *UNSPECIFIED* actually stands for *WIFI_REASON_UNSPECIFIED* and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 8.4.1.7 of IEEE 802.11-2012 (For more information, refer to the standard mentioned above). The last column describes the reason.
+The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in esp_wifi_types.h. The common prefix *WIFI_REASON* is removed, which means that *UNSPECIFIED* actually stands for *WIFI_REASON_UNSPECIFIED* and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 9.4.1.7 of IEEE 802.11-2020. (For more information, refer to the standard mentioned above.) The last column describes the reason.
 
 .. list-table::
    :header-rows: 1
@@ -996,6 +1001,102 @@ The table below shows the reason code defined in {IDF_TARGET_NAME}. The first co
        For the ESP station, this reason is reported when:
 
        - it is received from the AP.
+   * - TDLS_PEER_UNREACHABLE
+     - 25
+     - 25
+     - TDLS direct-link teardown due to TDLS peer STA unreachable via the TDLS direct link.
+   * - TDLS_UNSPECIFIED
+     - 26
+     - 26
+     - TDLS direct-link teardown for unspecified reason.
+   * - SSP_REQUESTED_DISASSOC
+     - 27
+     - 27
+     - Disassociated because session terminated by SSP request.
+   * - NO_SSP_ROAMING_AGREEMENT
+     - 28
+     - 28
+     - Disassociated because of lack of SSP roaming agreement.
+   * - BAD_CIPHER_OR_AKM
+     - 29
+     - 29
+     - Requested service rejected because of SSP cipher suite or AKM requirement.
+   * - NOT_AUTHORIZED_THIS_LOCATION
+     - 30
+     - 30
+     - Requested service not authorized in this location.
+   * - SERVICE_CHANGE_PRECLUDES_TS
+     - 31
+     - 31
+     - TS deleted because QoS AP lacks sufficient bandwidth for this QoS STA due to a change in BSS service characteristics or operational mode (e.g., an HT BSS change from 40 MHz channel to 20 MHz channel).
+   * - UNSPECIFIED_QOS
+     - 32
+     - 32
+     - Disassociated for unspecified, QoS-related reason.
+   * - NOT_ENOUGH_BANDWIDTH
+     - 33
+     - 33
+     - Disassociated because QoS AP lacks sufficient bandwidth for this QoS STA.
+   * - MISSING_ACKS
+     - 34
+     - 34
+     - Disassociated because excessive number of frames need to be acknowledged, but are not acknowledged due to AP transmissions and/or poor channel conditions.
+   * - EXCEEDED_TXOP
+     - 35
+     - 35
+     - Disassociated because STA is transmitting outside the limits of its TXOPs.
+   * - STA_LEAVING
+     - 36
+     - 36
+     - Requesting STA is leaving the BSS (or resetting).
+   * - END_BA
+     - 37
+     - 37
+     - Requesting STA is no longer using the stream or session.
+   * - UNKNOWN_BA
+     - 38
+     - 38
+     - Requesting STA received frames using a mechanism for which a setup has not been completed.
+   * - TIMEOUT
+     - 39
+     - 39
+     - Requested from peer STA due to timeout
+   * - Reserved
+     - 40 ~ 45
+     - 40 ~ 45
+     - 
+   * - PEER_INITIATED
+     - 46
+     - 46
+     - In a Disassociation frame: Disassociated because authorized access limit reached.
+   * - AP_INITIATED
+     - 47
+     - 47
+     - In a Disassociation frame: Disassociated due to external service requirements.
+   * - INVALID_FT_ACTION_FRAME_COUNT
+     - 48
+     - 48
+     - Invalid FT Action frame count.
+   * - INVALID_PMKID
+     - 49
+     - 49
+     - Invalid pairwise master key identifier (PMKID).
+   * - INVALID_MDE
+     - 50
+     - 50
+     - Invalid MDE.
+   * - INVALID_FTE
+     - 51
+     - 51
+     - Invalid FTE
+   * - TRANSMISSION_LINK_ESTABLISHMENT_FAILED
+     - 67
+     - 67
+     - Transmission link establishment in alternative channel failed.
+   * - ALTERATIVE_CHANNEL_OCCUPIED
+     - 68
+     - 68
+     - The alternative channel is occupied.
    * - BEACON_TIMEOUT
      - 200
      - reserved
@@ -1020,6 +1121,51 @@ The table below shows the reason code defined in {IDF_TARGET_NAME}. The first co
      - 205
      - reserved
      - Espressif-specific Wi-Fi reason code: the connection to the AP has failed.
+
+
+Wi-Fi Reason code related to wrong password
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to wrong password.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - 4WAY_HANDSHAKE_TIMEOUT
+     - 15
+     - Four-way handshake times out. Setting wrong password when STA connecting to an encrpyted AP.
+   * - NO_AP_FOUND
+     - 201
+     - This may related to wrong password in the two scenarios:
+
+       - Setting password when STA connecting to an unencrypted AP.
+       - Doesn't setting password when STA connecting to an encrypted AP.
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
+
+Wi-Fi Reason code related to low RSSI
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to low RSSI.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - NO_AP_FOUND
+     - 201
+     - The station fails to scan the target AP due to low RSSI
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
 
 
 {IDF_TARGET_NAME} Wi-Fi Station Connecting When Multiple APs Are Found
@@ -1076,7 +1222,7 @@ Call :cpp:func:`esp_wifi_set_mode()` to set the Wi-Fi mode.
 Station Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the station. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the station. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
 .. list-table::
    :header-rows: 1
@@ -1095,7 +1241,7 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
    * - bssid
      - This is valid only when bssid_set is 1; see field “bssid_set”.
    * - channel
-     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans others to find the target AP. If you do not know which channel the target AP is running on, set it to 0.
+     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans the channel 1 ~ N but skip the specific channel to find the target AP. For example, if the channel is 3, the scan order will be 3, 1, 2, 4,..., N. If you do not know which channel the target AP is running on, set it to 0.
    * - sort_method
      - This field is only for WIFI_ALL_CHANNEL_SCAN.
 
@@ -1115,9 +1261,9 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
 AP Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the AP. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
-.. only:: esp32 or esp32s2 or esp32c3 or esp32s3
+.. only:: esp32 or esp32s2 or esp32s3
 
     .. list-table::
       :header-rows: 1
@@ -1132,13 +1278,39 @@ API esp_wifi_set_config() can be used to configure the AP. The table below descr
       * - ssid_len
         - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
       * - channel
-        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults the channel to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
       * - authmode
-        - Auth mode of ESP AP; currently, ESP Wi-Fi does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
+        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
       * - ssid_hidden
         - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
       * - max_connection
-        - Currently, ESP Wi-Fi supports up to 10 Wi-Fi connections. If max_connection > 10, AP defaults the value to 10.
+        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to 15 (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= 2, the max_connection can be set up to 15, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+      * - beacon_interval
+        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
+
+
+.. only:: esp32c3
+
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
+
+      * - Field
+        - Description
+      * - ssid
+        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ESP_aabbcc, where “aabbcc” is the last three bytes of the AP MAC.
+      * - password
+        - Password of AP; if the auth mode is WIFI_AUTH_OPEN, this field will be ignored.
+      * - ssid_len
+        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
+      * - channel
+        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+      * - authmode
+        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
+      * - ssid_hidden
+        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
+      * - max_connection
+        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to 10 (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= 7, the max_connection can be set up to 10, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
       * - beacon_interval
         - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
@@ -1158,13 +1330,13 @@ API esp_wifi_set_config() can be used to configure the AP. The table below descr
       * - ssid_len
         - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
       * - channel
-        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults the channel to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
       * - authmode
-        - Auth mode of ESP AP; currently, ESP Wi-Fi does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
+        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
       * - ssid_hidden
         - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
       * - max_connection
-        - Currently, ESP Wi-Fi supports up to 4 Wi-Fi connections. If max_connection > 4, AP defaults the value to 4.
+        - The max number of stations allowed to connect in, the default value is 2. ESP Wi-Fi supports up to 4 (ESP_WIFI_MAX_CONN_NUM) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 4, the max_connection can be set up to (4 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
       * - beacon_interval
         - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
@@ -1365,13 +1537,7 @@ The following table depicts which country info is used in different Wi-Fi modes 
 
        For scan:
 
-       - If schan+nchan-1 >11 :
-
-         Use active scan from schan to 11 and use passive scan from 12 to 14.
-
-       - If schan+nchan-1 <= 11 :
-
-         Use active scan from schan to schan+nchan-1 and use passive scan from schan+nchan to 14.
+         Use active scan from 1 to 11 and use passive scan from 12 to 14.
 
        Always keep in mind that if an AP with hidden SSID and station is set to a passive scan channel, the passive scan will not find it. In other words, if the application hopes to find the AP with hidden SSID in every channel, the policy of country info should be configured to WIFI_COUNTRY_POLICY_MANUAL.
 
@@ -1381,24 +1547,25 @@ The following table depicts which country info is used in different Wi-Fi modes 
 
        For scan:
 
-       - If schan+nchan-1 >11 :
-
-         Use active scan from schan to 11 and use passive scan from 12 to schan+nchan-1.
-
-       - If schan+nchan-1 <= 11 :
-
          Use active scan from schan to schan+nchan-1.
+
    * - AP
      - WIFI_COUNTRY_POLICY_AUTO
      - Always use the configured country info.
+
    * - AP
      - WIFI_COUNTRY_POLICY_MANUAL
      - Always use the configured country info.
+
    * - Station/AP-coexistence
      - WIFI_COUNTRY_POLICY_AUTO
-     - If the station does not connect to any external AP, the AP uses the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+       AP: If the station does not connect to any external AP, the AP uses the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
 
-       Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+   * - Station/AP-coexistence
+     - WIFI_COUNTRY_POLICY_MANUAL
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_MANUAL.
+       AP: Same as AP mode with policy WIFI_COUNTRY_POLICY_MANUAL.
 
 
 Home Channel
@@ -1453,7 +1620,7 @@ Current implementation of 802.11k includes support for beacon measurement report
 
 Refer ESP-IDF example :idf_file:`examples/wifi/roaming/README.md` to set up and use these APIs. Example code only demonstrates how these APIs can be used, and the application should define its own algorithm and cases as required.
 
-.. only:: esp32s2 or esp32c3
+.. only:: SOC_WIFI_FTM_SUPPORT
 
     Wi-Fi Location
     -------------------------------
@@ -1500,6 +1667,81 @@ AP Sleep
 Currently, {IDF_TARGET_NAME} AP does not support all of the power-saving feature defined in Wi-Fi specification. To be specific, the AP only caches unicast data for the stations connect to this AP, but does not cache the multicast data for the stations. If stations connected to the {IDF_TARGET_NAME} AP are power-saving enabled, they may experience multicast packet loss.
 
 In the future, all power-saving features will be supported on {IDF_TARGET_NAME} AP.
+
+Disconnected State Sleep
++++++++++++++++++++++++++++++++
+
+Disconnected state is the duration without Wi-Fi connection between :cpp:func:`esp_wifi_start` to :cpp:func:`esp_wifi_stop`.
+
+Currently, {IDF_TARGET_NAME} Wi-Fi supports sleep mode in disconnected state if running at station mode. This feature could be configured by Menuconfig choice :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE`.
+
+If :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE` is enabled, RF, PHY and BB would be turned off in disconnected state when IDLE. The current would be same with current at modem-sleep.
+
+The choice :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE` would be selected by default, while it would be selected forcefully in Menuconfig at coexistence mode.
+
+.. _connectionless-module-power-save:
+
+Connectionless Modules Power-saving
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Connectionless modules are those Wi-Fi modules not relying on Wi-Fi connection, e.g ESP-NOW, DPP, FTM. These modules start from :cpp:func:`esp_wifi_start`, working until :cpp:func:`esp_wifi_stop`.
+
+Currently, if ESP-NOW works at station mode, its supported to sleep at both connected state and disconnected state.
+
+Connectionless Modules TX
+*******************************
+
+For each connectionless module, its supported to TX at any sleeping time without any extra configuration.
+
+Meanwhile, :cpp:func:`esp_wifi_80211_tx` is supported at sleep as well.
+
+Connectionless Modules RX
+*******************************
+
+For each connectionless module, two parameters shall be configured to RX at sleep, which are `Window` and `Interval`.
+
+At the start of `Interval` time, RF, PHY, BB would be turned on and kept for `Window` time. Connectionless Module could RX in the duration.
+
+**Interval**
+
+ - There is only one `Interval`. Its configured by :cpp:func:`esp_wifi_set_connectionless_interval`. The unit is milliseconds.
+
+ - The default value of `Interval` is `ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE`.
+
+ - Event `WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START`_ would be posted at the start of `Interval`. Since `Window` also starts at that momemt, its recommended to TX in that event.
+
+ - At connected state, the start of `Interval` would be aliged with TBTT.
+
+**Window**
+
+ - Each connectionless module has its own `Window` after start. Connectionless Modules Power-saving would work with the max one among them.
+
+ - `Window` is configured by :cpp:func:`module_name_set_wake_window`. The unit is milliseconds.
+
+ - The default value of `Window` is the maximum.
+
+.. table:: RF, PHY and BB usage under different circumstances
+
+    +----------------------+-------------------------------------------------+---------------------------------------------------------------------------+
+    |                      | Interval                                                                                                                    |
+    +                      +-------------------------------------------------+---------------------------------------------------------------------------+
+    |                      | ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE   | 1 - maximum                                                               |
+    +--------+-------------+-------------------------------------------------+---------------------------------------------------------------------------+
+    | Window | 0           | not used                                                                                                                    |
+    +        +-------------+-------------------------------------------------+---------------------------------------------------------------------------+
+    |        | 1 - maximum | default mode                                    | used periodically (Window < Interval) / used all time (Window ≥ Interval) |
+    +--------+-------------+-------------------------------------------------+---------------------------------------------------------------------------+
+
+Default mode
+*******************************
+
+If `Interval` is `ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE` with non-zero `Window`, Connectionless Modules Power-saving would work in default mode.
+
+In default mode, RF, PHY, BB would be kept on if no coexistence with non-Wi-Fi protocol.
+
+With coexistence, RF, PHY, BB resources are allocated by coexistence module to Wi-Fi connectionless module and non-Wi-Fi module， using time-division method. In default mode, Wi-Fi connectionless module is allowed to use RF, BB, PHY periodically under a stable performance.
+
+Its recommended to configure Connectionless Modules Power-saving to default mode if there is Wi-Fi connectionless module coexists with non-Wi-Fi module.
 
 {IDF_TARGET_NAME} Wi-Fi Throughput
 -----------------------------------
@@ -1951,7 +2193,13 @@ Theoretically, the higher priority AC has better performance than the lower prio
 Wi-Fi AMSDU
 -------------------------
 
-{IDF_TARGET_NAME} supports receiving and transmitting AMSDU.
+.. only:: not SOC_SPIRAM_SUPPORTED
+
+    {IDF_TARGET_NAME} supports receiving AMSDU.
+
+.. only:: SOC_SPIRAM_SUPPORTED
+
+    {IDF_TARGET_NAME} supports receiving and transmitting AMSDU. AMSDU TX is disabled by default, since enable AMSDU TX need more memory. Select :ref:`CONFIG_ESP_WIFI_AMSDU_TX_ENABLED` to enable AMSDU Tx feature, it depends on :ref:`CONFIG_SPIRAM`.
 
 Wi-Fi Fragment
 -------------------------
@@ -2044,24 +2292,24 @@ Increasing the size or number of the buffers mentioned above properly can improv
 
 **RX direction:**
 
- - :ref:`CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM`
     This parameter indicates the number of DMA buffer at the hardware layer. Increasing this parameter will increase the sender's one-time receiving throughput, thereby improving the Wi-Fi protocol stack ability to handle burst traffic.
 
- - :ref:`CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM`
     This parameter indicates the number of RX buffer in the Wi-Fi layer. Increasing this parameter will improve the performance of packet reception. This parameter needs to match the RX buffer size of the LwIP layer.
 
- - :ref:`CONFIG_ESP32_WIFI_RX_BA_WIN`
-    This parameter indicates the size of the AMPDU BA Window at the receiving end. This parameter should be configured to the smaller value between twice of :ref:`CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM` and :ref:`CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM`.
+ - :ref:`CONFIG_ESP_WIFI_RX_BA_WIN`
+    This parameter indicates the size of the AMPDU BA Window at the receiving end. This parameter should be configured to the smaller value between twice of :ref:`CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM` and :ref:`CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM`.
 
  - :ref:`CONFIG_LWIP_TCP_WND_DEFAULT`
     This parameter represents the RX buffer size of the LwIP layer for each TCP stream. Its value should be configured to the value of WIFI_DYNAMIC_RX_BUFFER_NUM (KB) to reach a high and stable performance. Meanwhile, in case of multiple streams, this value needs to be reduced proportionally.
 
 **TX direction:**
 
- - :ref:`CONFIG_ESP32_WIFI_TX_BUFFER`
+ - :ref:`CONFIG_ESP_WIFI_TX_BUFFER`
     This parameter indicates the type of TX buffer, it is recommended to configure it as a dynamic buffer, which can make full use of memory.
 
- - :ref:`CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM`
     This parameter indicates the number of TX buffer on the Wi-Fi layer. Increasing this parameter will improve the performance of packet sending. The parameter value needs to match the TX buffer size of the LwIP layer.
 
  - :ref:`CONFIG_LWIP_TCP_SND_BUF_DEFAULT`
@@ -2071,10 +2319,10 @@ Increasing the size or number of the buffers mentioned above properly can improv
 
 .. only:: esp32 or esp32s2
 
-    - :ref:`CONFIG_ESP32_WIFI_IRAM_OPT`
+    - :ref:`CONFIG_ESP_WIFI_IRAM_OPT`
         If this option is enabled, some Wi-Fi functions are moved to IRAM, improving throughput. This increases IRAM usage by 15 kB.
 
-    - :ref:`CONFIG_ESP32_WIFI_RX_IRAM_OPT`
+    - :ref:`CONFIG_ESP_WIFI_RX_IRAM_OPT`
         If this option is enabled, some Wi-Fi RX functions are moved to IRAM, improving throughput. This increases IRAM usage by 16 kB.
 
  - :ref:`CONFIG_LWIP_IRAM_OPTIMIZATION`
@@ -2633,12 +2881,12 @@ The parameters not mentioned in the following table should be set to the default
      - **Minimum rank**
         This is the minimum configuration rank of {IDF_TARGET_NAME}. The protocol stack only uses the necessary memory for running. It is suitable for scenarios where there is no requirement for performance and the application requires lots of space.
 
-.. only:: esp32 or esp32s2 or esp32s3
+.. only:: SOC_SPIRAM_SUPPORTED
 
     Using PSRAM
     ++++++++++++++++++++++++++++
 
-    PSRAM is generally used when the application takes up a lot of memory. In this mode, the :ref:`CONFIG_ESP32_WIFI_TX_BUFFER` is forced to be static. :ref:`CONFIG_ESP32_WIFI_STATIC_TX_BUFFER_NUM` indicates the number of DMA buffers at the hardware layer, and increasing this parameter can improve performance.
+    PSRAM is generally used when the application takes up a lot of memory. In this mode, the :ref:`CONFIG_ESP_WIFI_TX_BUFFER` is forced to be static. :ref:`CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM` indicates the number of DMA buffers at the hardware layer, and increasing this parameter can improve performance.
     The following are the recommended ranks for using PSRAM:
 
     .. only:: esp32

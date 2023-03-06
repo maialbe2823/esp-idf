@@ -36,11 +36,6 @@ static const char *TAG = "clk";
 
 #define RTC_XTAL_CAL_RETRY 1
 
-/* Lower threshold for a reasonably-looking calibration value for a 32k XTAL.
- * The ideal value (assuming 32768 Hz frequency) is 1000000/32768*(2**19) = 16*10^6.
- */
-#define MIN_32K_XTAL_CAL_VAL  15000000L
-
 /* Indicates that this 32k oscillator gets input from external oscillator, rather
  * than a crystal.
  */
@@ -159,7 +154,7 @@ static void select_rtc_slow_clk(slow_clk_sel_t slow_clk)
             // When SLOW_CLK_CAL_CYCLES is set to 0, clock calibration will not be performed at startup.
             if (SLOW_CLK_CAL_CYCLES > 0) {
                 cal_val = rtc_clk_cal(RTC_CAL_32K_XTAL, SLOW_CLK_CAL_CYCLES);
-                if (cal_val == 0 || cal_val < MIN_32K_XTAL_CAL_VAL) {
+                if (cal_val == 0) {
                     if (retry_32k_xtal-- > 0) {
                         continue;
                     }
@@ -302,6 +297,11 @@ __attribute__((weak)) void esp_perip_clk_init(void)
     /* Disable hardware crypto clocks. */
     CLEAR_PERI_REG_MASK(SYSTEM_PERIP_CLK_EN1_REG, hwcrypto_perip_clk);
     SET_PERI_REG_MASK(SYSTEM_PERIP_RST_EN1_REG, hwcrypto_perip_clk);
+
+    /* Force clear backup dma reset signal. This is a fix to the backup dma
+     * implementation in the ROM, the reset signal was not cleared when the
+     * backup dma was started, which caused the backup dma operation to fail. */
+    CLEAR_PERI_REG_MASK(SYSTEM_PERIP_RST_EN1_REG, SYSTEM_PERI_BACKUP_RST);
 
     /* Disable WiFi/BT/SDIO clocks. */
     CLEAR_PERI_REG_MASK(SYSTEM_WIFI_CLK_EN_REG, wifi_bt_sdio_clk);

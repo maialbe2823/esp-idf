@@ -25,7 +25,6 @@
 #define DR_REG_ITAG_TABLE                       0x600C6000
 #define DR_REG_DTAG_TABLE                       0x600C8000
 #define DR_REG_EXT_MEM_ENC                      0x600CC000
-#define DR_REG_DPORT_END                        0x600D3FFC
 
 
 #define REG_UHCI_BASE(i)         (DR_REG_UHCI0_BASE - (i) * 0x8000)
@@ -153,10 +152,10 @@
 #define  APB_CLK_FREQ_ROM                            (40*1000000)
 #define  CPU_CLK_FREQ_ROM                            APB_CLK_FREQ_ROM
 #define  EFUSE_CLK_FREQ_ROM                          (20*1000000)
+#define  CPU_CLK_FREQ_MHZ_BTLD                       (80)               // The cpu clock frequency (in MHz) to set at 2nd stage bootloader system clock configuration
 #define  CPU_CLK_FREQ                                APB_CLK_FREQ
 #define  APB_CLK_FREQ                                (80*1000000)
 #define  REF_CLK_FREQ                                (1000000)
-#define  RTC_CLK_FREQ                                (20*1000000)
 #define  XTAL_CLK_FREQ                               (40*1000000)
 #define  UART_CLK_FREQ                               APB_CLK_FREQ
 #define  WDT_CLK_FREQ                                APB_CLK_FREQ
@@ -287,3 +286,6 @@
 
 //Invalid interrupt for number interrupt matrix
 #define ETS_INVALID_INUM                        6
+
+// Interrupt number for the Interrupt watchdog
+#define ETS_INT_WDT_INUM                         (ETS_T1_WDT_INUM)

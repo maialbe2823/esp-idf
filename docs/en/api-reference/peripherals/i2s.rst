@@ -1,7 +1,7 @@
 Inter-IC Sound (I2S)
 ====================
 
-{IDF_TARGET_I2S_NUM:default="two", esp32s2="one", esp32c3="one"}
+{IDF_TARGET_I2S_NUM:default="one", esp32="two", esp32s3="two"}
 
 Introduction
 ------------
@@ -36,7 +36,7 @@ Each I2S controller has the following features that can be configured by the I2S
 
 .. only:: SOC_I2S_HW_VERSION_2
 
-    Each controller has separate rx and tx channel. That means they are able to work under different clock and slot configurations with separate GPIO pins. Note that although the internal MCLK of tx channel and rx channel are separate on a controller, the output MCLK signal can only be attached to one channel. If two different MCLK ouput is required, they must be allocated on different I2S controller.
+    Each controller has separate rx and tx channel. That means they are able to work under different clock and slot configurations with separate GPIO pins. Note that although the internal MCLK of tx channel and rx channel are separate on a controller, the output MCLK signal can only be attached to one channel. If two different MCLK output is required, they must be allocated on different I2S controller.
 
 I2S File Structure
 ------------------
@@ -70,11 +70,11 @@ Clock Source
 
 - :cpp:enumerator:`i2s_clock_src_t::I2S_CLK_SRC_DEFAULT`: Default PLL clock.
 
-.. only:: not esp32h2
+.. only:: not esp32h4
 
     - :cpp:enumerator:`i2s_clock_src_t::I2S_CLK_SRC_PLL_160M`: 160 MHz PLL clock.
 
-.. only:: esp32h2
+.. only:: esp32h4
 
     - :cpp:enumerator:`i2s_clock_src_t::I2S_CLK_SRC_PLL_96M`: 96 MHz PLL clock.
 
@@ -108,7 +108,8 @@ Overview of All Modes
 =========  ========  ========  ========  ========  ========  ==========
 ESP32      I2S 0/1    I2S 0     I2S 0      none     I2S 0      I2S 0
 ESP32S2     I2S 0     none      none       none     none       I2S 0
-ESP32C3     I2S 0     I2S 0     none      I2S0      none       none
+ESP32C3     I2S 0     I2S 0     none      I2S 0     none       none
+ESP32C6     I2S 0     I2S 0     none      I2S 0     none       none
 ESP32S3    I2S 0/1    I2S 0     I2S 0    I2S 0/1    none       none
 =========  ========  ========  ========  ========  ========  ==========
 
@@ -117,11 +118,11 @@ Standard Mode
 
 Standard mode always has left and right two sound channels which are called 'slots'. These slots can support 8/16/24/32 bits width sample data. And the communication format for the slots mainly includes these following formats:
 
-- **Philip Format**: Data signal have one bit shift comparing to the WS(word select) signal. And the duty of WS signal is 50%.
+- **Philips Format**: Data signal have one bit shift comparing to the WS(word select) signal. And the duty of WS signal is 50%.
 
-.. wavedrom:: /../_static/diagrams/i2s/std_philip.json
+.. wavedrom:: /../_static/diagrams/i2s/std_philips.json
 
-- **MSB Format**: Almost same as philip format, but its data have no shift.
+- **MSB Format**: Almost same as philips format, but its data have no shift.
 
 .. wavedrom:: /../_static/diagrams/i2s/std_msb.json
 
@@ -135,7 +136,7 @@ Standard mode always has left and right two sound channels which are called 'slo
     PDM Mode (TX)
     ^^^^^^^^^^^^^
 
-    PDM(Pulse-density Modulation) mode for tx channel can convert PCM data into PDM format which always has left and right slots. PDM TX can only support 16 bits width sample data. PDM TX only needs CLK pin for clock signal and DOUT pin for data signal (i.e. WS and SD signal in the following figure, the BCK signal is an internal bit sampling clock, not needed between PDM devices). This mode allows user to configure the up-sampling parameters :cpp:member:`i2s_pdm_tx_clk_config_t::up_sample_fp` :cpp:member:`i2s_pdm_tx_clk_config_t::up_sample_fs`. The up-sampling rate can be calculated by ``up_sample_rate = fp / fs``, there are up-sampling modes in PDM TX:
+    PDM(Pulse-density Modulation) mode for tx channel can convert PCM data into PDM format which always has left and right slots. PDM TX can only support 16 bits width sample data. PDM TX is only supported on I2S0, it needs at least a CLK pin for clock signal and a DOUT pin for data signal (i.e. WS and SD signal in the following figure, the BCK signal is an internal bit sampling clock, not needed between PDM devices). This mode allows user to configure the up-sampling parameters :cpp:member:`i2s_pdm_tx_clk_config_t::up_sample_fp` :cpp:member:`i2s_pdm_tx_clk_config_t::up_sample_fs`. The up-sampling rate can be calculated by ``up_sample_rate = fp / fs``, there are up-sampling modes in PDM TX:
 
     - **Fixed Clock Frequency**: In this mode the up-sampling rate will change according to the sample rate. Setting ``fp = 960`` and ``fs = sample_rate / 100``, then the clock frequency(Fpdm) on CLK pin will be fixed to 128 * 48 KHz = 6.144 MHz, note that this frequency is not equal to the sample rate(Fpcm).
     - **Fixed Up-sampling Rate**: In this mode the up-sampling rate is fixed to 2. Setting ``fp = 960`` and ``fs = 480``, then the clock frequency(Fpdm) on CLK pin will be ``128 * sample_rate``
@@ -148,7 +149,7 @@ Standard mode always has left and right two sound channels which are called 'slo
     PDM Mode (RX)
     ^^^^^^^^^^^^^
 
-    PDM(Pulse-density Modulation) mode for rx channel can receive PDM format data and convert the data into PCM format. PDM RX can only support 16 bits width sample data. PDM RX only need WS pin for clock signal and DIN pin for data signal. This mode allows user to configure the down-sampling parameter :cpp:member:`i2s_pdm_rx_clk_config_t::dn_sample_mode`, there are two down-sampling modes in PDM RX:
+    PDM(Pulse-density Modulation) mode for rx channel can receive PDM format data and convert the data into PCM format. PDM RX is only supported on I2S0, it can only support 16 bits width sample data. PDM RX needs at least a CLK pin for clock signal and a DIN pin for data signal. This mode allows user to configure the down-sampling parameter :cpp:member:`i2s_pdm_rx_clk_config_t::dn_sample_mode`, there are two down-sampling modes in PDM RX:
 
     - :cpp:enumerator:`i2s_pdm_dsr_t::I2S_PDM_DSR_8S`: In this mode, the clock frequency(Fpdm) on WS pin will be sample_rate(Fpcm) * 64.
     - :cpp:enumerator:`i2s_pdm_dsr_t::I2S_PDM_DSR_16S`: In this mode, the clock frequency(Fpdm) on WS pin will be sample_rate(Fpcm) * 128.
@@ -159,13 +160,21 @@ Standard mode always has left and right two sound channels which are called 'slo
     TDM Mode
     ^^^^^^^^
 
-    TDM(Time Division Multiplexing) mode supports upto 16 slots, these slots can be enabled by :cpp:member:`i2s_tdm_slot_config_t::slot_mask`. But due to the hardware limitation, only upto 4 slots are supported while the slot is set to 32 bit-width, and 8 slots for 16 bit-width, 16 slots for 8 bit-width. The slot communication format of TDM is almost same as standard mode, but there are some small differences between them.
+    TDM(Time Division Multiplexing) mode supports up to 16 slots, these slots can be enabled by :cpp:member:`i2s_tdm_slot_config_t::slot_mask`.
 
-    - **Philip Format**: Data signal have one bit shift comparing to the WS(word select) signal. And no matter how many slots are contained in one frame, the duty of WS signal will always keep 50%.
+    .. only:: SOC_I2S_TDM_FULL_DATA_WIDTH
 
-    .. wavedrom:: /../_static/diagrams/i2s/tdm_philip.json
+        Any data bit-width is supported no matter how many slots are enabled, that means there can be up to ``32 bit-width * 16 slots = 512 bit`` in one frame.
 
-    - **MSB Format**: Almost same as philip format, but its data have no shift.
+    .. only:: not SOC_I2S_TDM_FULL_DATA_WIDTH
+
+        But due to the hardware limitation, only up to 4 slots are supported while the slot is set to 32 bit-width, and 8 slots for 16 bit-width, 16 slots for 8 bit-width. The slot communication format of TDM is almost same as standard mode, but there are some small differences between them.
+
+    - **Philips Format**: Data signal have one bit shift comparing to the WS(word select) signal. And no matter how many slots are contained in one frame, the duty of WS signal will always keep 50%.
+
+    .. wavedrom:: /../_static/diagrams/i2s/tdm_philips.json
+
+    - **MSB Format**: Almost same as philips format, but its data have no shift.
 
     .. wavedrom:: /../_static/diagrams/i2s/tdm_msb.json
 
@@ -177,7 +186,7 @@ Standard mode always has left and right two sound channels which are called 'slo
 
     .. wavedrom:: /../_static/diagrams/i2s/tdm_pcm_long.json
 
-.. only:: SOC_I2S_SUPPORTS_LDC_CAMERA
+.. only:: SOC_I2S_SUPPORTS_LCD_CAMERA
 
     LCD/Camera Mode
     ^^^^^^^^^^^^^^^
@@ -228,7 +237,7 @@ The ``<mode>`` in the diagram can be replaced by corresponding I2S communication
 Data Transport
 ^^^^^^^^^^^^^^
 
-The data transport of I2S peripheral, including sending and receiving, is realized by DMA. Before transporting data, please call :cpp:func:`i2s_channel_enable` to enable the specific channel. When the sent or received data reach the size of one DMA buffer, ``I2S_OUT_EOF`` or ``I2S_IN_SUC_EOF`` interrupt will be triggered. Note that the DMA buffer size is not equal to :cpp:member:`i2s_chan_config_t::dma_frame_num`, one frame here means all the sampled data in one WS circle. Therefore, ``dma_buffer_size = dma_frame_num * slot_num * slot_bit_width / 8``. For the transmit case, users can input the data by calling :cpp:func:`i2s_channel_write`. This function will help users to copy the data from the source buffer to the DMA tx buffer and wait for the transmition finished. Then it'll repeat until the sent bytes reach the given size. For the receive case, the function :cpp:func:`i2s_channel_read` will wait for receiving the message queue which contains the DMA buffer address, it will help users to copy the data from DMA rx buffer to the destination buffer.
+The data transport of I2S peripheral, including sending and receiving, is realized by DMA. Before transporting data, please call :cpp:func:`i2s_channel_enable` to enable the specific channel. When the sent or received data reach the size of one DMA buffer, ``I2S_OUT_EOF`` or ``I2S_IN_SUC_EOF`` interrupt will be triggered. Note that the DMA buffer size is not equal to :cpp:member:`i2s_chan_config_t::dma_frame_num`, one frame here means all the sampled data in one WS circle. Therefore, ``dma_buffer_size = dma_frame_num * slot_num * slot_bit_width / 8``. For the transmit case, users can input the data by calling :cpp:func:`i2s_channel_write`. This function will help users to copy the data from the source buffer to the DMA tx buffer and wait for the transmission finished. Then it'll repeat until the sent bytes reach the given size. For the receive case, the function :cpp:func:`i2s_channel_read` will wait for receiving the message queue which contains the DMA buffer address, it will help users to copy the data from DMA rx buffer to the destination buffer.
 
 Both :cpp:func:`i2s_channel_write` and :cpp:func:`i2s_channel_read` are blocking functions, they will keep waiting until the whole source buffer are sent or the whole destination buffer loaded, unless they exceed the max blocking time, then the error code `ESP_ERR_TIMEOUT` will return in this case. To send or receive data asynchronously, callbacks can be registered by  :cpp:func:`i2s_channel_register_event_callback`, users are able to access the DMA buffer directly in the callback function instead of transmitting or receiving by the two blocking functions. However, please be aware that it is an interrupt callback, don't do complex logic, floating operation or call non-reentrant functions in the callback.
 
@@ -273,7 +282,7 @@ Standard TX/RX Usage
 
 Different slot communication formats can be generated by following helper macros for standard mode. As described above, there are three formats in standard mode, their helper macros are:
 
-- :c:macro:`I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG`
+- :c:macro:`I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_PCM_SLOT_DEFAULT_CONFIG`
 - :c:macro:`I2S_STD_MSB_SLOT_DEFAULT_CONFIG`
 
@@ -282,7 +291,7 @@ The clock config helper macro is:
 - :c:macro:`I2S_STD_CLK_DEFAULT_CONFIG`
 
 Please refer to :ref:`i2s-api-reference-i2s_std` for STD API information.
-And for more details, please refer to :component_file:`driver/include/driver/i2s_std.h`.
+And for more details, please refer to :component_file:`driver/i2s/include/driver/i2s_std.h`.
 
 STD TX Mode
 ~~~~~~~~~~~
@@ -319,7 +328,7 @@ Here is the table of the real data on the line with different :cpp:member:`i2s_s
 
         It's similar when the data is 32-bit width, but take care when using 8-bit and 24-bit data width. For 8-bit width, the written buffer should still using ``uint16_t`` (i.e. align with 2 bytes), and only the high 8 bits will be valid, the low 8 bits are dropped, and for 24-bit width, the buffer is supposed to use ``uint32_t`` (i.e. align with 4 bytes), and only the high 24 bits valid, the low 8 bits are dropped.
 
-        Another point is that, for the ``8-bit`` and ``16-bit`` mono mode, the real data on the line are swapped. To get the correct sequence, the writting buffer need to swap the data every two bytes.
+        Another point is that, for the ``8-bit`` and ``16-bit`` mono mode, the real data on the line are swapped. To get the correct sequence, the writing buffer need to swap the data every two bytes.
 
 .. only:: esp32s2
 
@@ -341,9 +350,9 @@ Here is the table of the real data on the line with different :cpp:member:`i2s_s
 
     .. note::
 
-        Similar for 8-bit and 32-bit data width, the type of the buffer is better to be ``uint8_t`` and ``uint32_t`` type. But specially, when the data width is 24-bit, the data buffer should aligned with 3-byte(i.e. every 3 bytes stands for a 24-bit data in one slot), additionally, :cpp:member:`i2s_chan_config_t::dma_frame_num`, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` and the writting buffer size should be the multiple of ``3``, otherwise the data on the line or the sample rate will be incorrect.
+        Similar for 8-bit and 32-bit data width, the type of the buffer is better to be ``uint8_t`` and ``uint32_t`` type. But specially, when the data width is 24-bit, the data buffer should aligned with 3-byte(i.e. every 3 bytes stands for a 24-bit data in one slot), additionally, :cpp:member:`i2s_chan_config_t::dma_frame_num`, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` and the writing buffer size should be the multiple of ``3``, otherwise the data on the line or the sample rate will be incorrect.
 
-.. only:: esp32c3 or esp32s3 or esp32h2
+.. only:: not (esp32 or esp32s2)
 
     +----------------+-----------+-----------+----------+----------+----------+----------+----------+----------+----------+----------+
     | data bit width | slot mode | slot mask | ws low   | ws high  | ws low   | ws high  | ws low   | ws high  | ws low   | ws high  |
@@ -363,7 +372,7 @@ Here is the table of the real data on the line with different :cpp:member:`i2s_s
 
     .. note::
 
-        Similar for 8-bit and 32-bit data width, the type of the buffer is better to be ``uint8_t`` and ``uint32_t`` type. But specially, when the data width is 24-bit, the data buffer should aligned with 3-byte(i.e. every 3 bytes stands for a 24-bit data in one slot), additionally, :cpp:member:`i2s_chan_config_t::dma_frame_num`, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` and the writting buffer size should be the multiple of ``3``, otherwise the data on the line or the sample rate will be incorrect.
+        Similar for 8-bit and 32-bit data width, the type of the buffer is better to be ``uint8_t`` and ``uint32_t`` type. But specially, when the data width is 24-bit, the data buffer should aligned with 3-byte(i.e. every 3 bytes stands for a 24-bit data in one slot), additionally, :cpp:member:`i2s_chan_config_t::dma_frame_num`, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` and the writing buffer size should be the multiple of ``3``, otherwise the data on the line or the sample rate will be incorrect.
 
 .. code-block:: c
 
@@ -464,7 +473,7 @@ Here is the table of the data that received in the buffer with different :cpp:me
 
         ``8-bit``, ``24-bit`` and ``32-bit`` are similar as ``16-bit``, the data bit-width in the receiving buffer are equal to the data bit-width on the line. Additionally, when using ``24-bit`` data width, :cpp:member:`i2s_chan_config_t::dma_frame_num`, :cpp:member:`i2s_std_clk_config_t::mclk_multiple` and the receiving buffer size should be the multiple of ``3``, otherwise the data on the line or the sample rate will be incorrect.
 
-.. only:: esp32c3 or esp32s3 or esp32h2
+.. only:: not (esp32 or esp32s2)
 
     +----------------+-----------+-----------+----------+----------+----------+----------+----------+----------+----------+----------+
     | data bit width | slot mode | slot mask | data 0   | data 1   | data 2   | data 3   | data 4   | data 5   | data 6   | data 7   |
@@ -539,9 +548,9 @@ Here is the table of the data that received in the buffer with different :cpp:me
     - :c:macro:`I2S_PDM_TX_CLK_DEFAULT_CONFIG`
 
     Please refer to :ref:`i2s-api-reference-i2s_pdm` for PDM TX API information.
-    And for more details, please refer to :component_file:`driver/include/driver/i2s_pdm.h`.
+    And for more details, please refer to :component_file:`driver/i2s/include/driver/i2s_pdm.h`.
 
-    The PDM data width is fixed to 16-bit, when the data in a ``int16_t`` writting buffer are:
+    The PDM data width is fixed to 16-bit, when the data in a ``int16_t`` writing buffer are:
 
     +--------+--------+--------+--------+--------+--------+--------+--------+--------+
     | data 0 | data 1 | data 2 | data 3 | data 4 | data 5 | data 6 | data 7 |  ...   |
@@ -569,7 +578,7 @@ Here is the table of the data that received in the buffer with different :cpp:me
         |           |   both    | 0x0001   | 0x0002   | 0x0003   | 0x0004   | 0x0005   | 0x0006   | 0x0007   | 0x0008   |
         +-----------+-----------+----------+----------+----------+----------+----------+----------+----------+----------+
 
-    .. only:: esp32c3 or esp32s3 or esp32h2
+    .. only:: not esp32
 
         Here is the table of the real data on the line with different :cpp:member:`i2s_pdm_tx_slot_config_t::slot_mode` and :cpp:member:`i2s_pdm_tx_slot_config_t::line_mode` (The PDM format on the line is transferred to PCM format for easier comprehension).
 
@@ -636,7 +645,7 @@ Here is the table of the data that received in the buffer with different :cpp:me
     - :c:macro:`I2S_PDM_RX_CLK_DEFAULT_CONFIG`
 
     Please refer to :ref:`i2s-api-reference-i2s_pdm` for PDM RX API information.
-    And for more details, please refer to :component_file:`driver/include/driver/i2s_pdm.h`.
+    And for more details, please refer to :component_file:`driver/i2s/include/driver/i2s_pdm.h`.
 
     The PDM data width is fixed to 16-bit, when the data on the line (The PDM format on the line is transferred to PCM format for easier comprehension) are:
 
@@ -676,6 +685,8 @@ Here is the table of the data that received in the buffer with different :cpp:me
 
             The right slot is received first in stereo mode. To switch the left and right slot in the buffer, please set the :cpp:member:`i2s_pdm_rx_gpio_config_t::invert_flags::clk_inv` to force invert the clock signal.
 
+            Specially, ESP32-S3 can support up to 4 data lines in PDM RX mode, each data line can be connected to two PDM MICs (left and right slots), which means the PDM RX on ESP32-S3 can support up to 8 PDM MICs. To enable multiple data lines, set the bits in :cpp:member:`i2s_pdm_rx_gpio_config_t::slot_mask` to enable corresponding slots first, and then set the data GPIOs in :cpp:type:`i2s_pdm_rx_gpio_config_t`.
+
     .. code-block:: c
 
         #include "driver/i2s_pdm.h"
@@ -711,7 +722,7 @@ Here is the table of the data that received in the buffer with different :cpp:me
 
     Different slot communication formats can be generated by following helper macros for TDM mode. As described above, there are four formats in TDM mode, their helper macros are:
 
-    - :c:macro:`I2S_TDM_PHILIP_SLOT_DEFAULT_CONFIG`
+    - :c:macro:`I2S_TDM_PHILIPS_SLOT_DEFAULT_CONFIG`
     - :c:macro:`I2S_TDM_MSB_SLOT_DEFAULT_CONFIG`
     - :c:macro:`I2S_TDM_PCM_SHORT_SLOT_DEFAULT_CONFIG`
     - :c:macro:`I2S_TDM_PCM_LONG_SLOT_DEFAULT_CONFIG`
@@ -721,7 +732,13 @@ Here is the table of the data that received in the buffer with different :cpp:me
     - :c:macro:`I2S_TDM_CLK_DEFAULT_CONFIG`
 
     Please refer to :ref:`i2s-api-reference-i2s_tdm` for TDM API information.
-    And for more details, please refer to :component_file:`driver/include/driver/i2s_tdm.h`.
+    And for more details, please refer to :component_file:`driver/i2s/include/driver/i2s_tdm.h`.
+
+    .. note::
+
+        When setting the clock configuration for a slave role, please be aware that :cpp:member:`i2s_tdm_clk_config_t::bclk_div` should not be smaller than 8 (hardware limitation), increase this field can reduce the data lagging that sent from the slave. In the high sample rate case, the data might lag behind more than one ``bclk`` which will lead data malposition, you can try to increase :cpp:member:`i2s_tdm_clk_config_t::bclk_div` gradually to correct it.
+
+        As :cpp:member:`i2s_tdm_clk_config_t::bclk_div` is the division of ``mclk`` to ``bclk``, increase it will also increase the ``mclk`` frequency, therefore, the clock calculation might failed if the ``mclk`` is too high to divide from the source clock, which means :cpp:member:`i2s_tdm_clk_config_t::bclk_div` is not the bigger the better.
 
     TDM TX Mode
     ~~~~~~~~~~~
@@ -815,7 +832,7 @@ Here is an example of how to allocate a pair of full-duplex channels:
     /* Set the configurations for BOTH TWO channels, since tx and rx channel have to be same in full-duplex mode */
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(32000),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = GPIO_NUM_4,
@@ -829,8 +846,8 @@ Here is an example of how to allocate a pair of full-duplex channels:
             },
         },
     };
-    i2s_init_channle(tx_handle, &std_cfg);
-    i2s_init_channle(rx_handle, &std_cfg);
+    i2s_channel_init_std_mode(tx_handle, &std_cfg);
+    i2s_channel_init_std_mode(rx_handle, &std_cfg);
 
     i2s_channel_enable(tx_handle);
     i2s_channel_enable(rx_handle);
@@ -856,7 +873,7 @@ Here is an example of how to allocate a pair of full-duplex channels:
         i2s_new_channel(&chan_cfg, &tx_handle, NULL);
         i2s_std_config_t std_tx_cfg = {
             .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
-            .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
             .gpio_cfg = {
                 .mclk = GPIO_NUM_0,
                 .bclk = GPIO_NUM_4,
@@ -916,7 +933,7 @@ Here is an example of how to allocate a pair of full-duplex channels:
         i2s_new_channel(&chan_cfg, &tx_handle, NULL);
         i2s_std_config_t std_tx_cfg = {
             .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
-            .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
             .gpio_cfg = {
                 .mclk = GPIO_NUM_0,
                 .bclk = GPIO_NUM_4,
@@ -1052,5 +1069,5 @@ I2S Driver
 I2S Types
 ^^^^^^^^^
 
-.. include-build-file:: inc/components/driver/include/driver/i2s_types.inc
+.. include-build-file:: inc/components/driver/i2s/include/driver/i2s_types.inc
 .. include-build-file:: inc/components/hal/include/hal/i2s_types.inc

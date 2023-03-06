@@ -11,7 +11,7 @@ The ULP RISC-V coprocessor code is written in C (assembly is also possible) and 
 
 If you have already set up ESP-IDF with CMake build system according to the :doc:`Getting Started Guide <../../../get-started/index>`, then the toolchain should already be installed.
 
-.. note: In earlier versions of ESP-IDF, RISC-V toolchain had a different prefix: `riscv-none-embed-gcc`.
+.. note:: In earlier versions of ESP-IDF, RISC-V toolchain had a different prefix: `riscv-none-embed-gcc`.
 
 Compiling the ULP RISC-V Code
 -----------------------------
@@ -20,7 +20,7 @@ To compile the ULP RISC-V code as part of the component, the following steps mus
 
 1. The ULP RISC-V code, written in C or assembly (must use the `.S` extension), must be placed in a separate directory inside the component directory, for instance, `ulp/`.
 
-.. note: When registering the component (via ``idf_component_register``), this directory should not be added to the ``SRC_DIRS`` argument as it is currently done for the ULP FSM. See the step below for how to properly add ULP source files.
+.. note:: When registering the component (via ``idf_component_register``), this directory should not be added to the ``SRC_DIRS`` argument as it is currently done for the ULP FSM. See the step below for how to properly add ULP source files.
 
 2. Call ``ulp_embed_binary`` from the component CMakeLists.txt after registration. For example::
 
@@ -98,6 +98,18 @@ To access the ULP RISC-V program variables from the main program, the generated 
         ulp_measurement_count = 64;
     }
 
+Mutual Exclusion
+^^^^^^^^^^^^^^^^
+
+If mutual exclusion is needed when accessing a variable shared between the main program and ULP, then this can be achieved by using the ULP RISC-V lock API:
+
+ * :cpp:func:`ulp_riscv_lock_acquire`
+ * :cpp:func:`ulp_riscv_lock_release`
+
+The ULP does not have any hardware instructions to facilitate mutual exclusion, so the lock API achieves this through a software algorithm (`Peterson's algorithm <https://en.wikipedia.org/wiki/Peterson%27s_algorithm>`_).
+
+The locks are intended to only be called from a single thread in the main program, and will not provide mutual exclusion if used simultaneously from multiple threads.
+
 Starting the ULP RISC-V Program
 -------------------------------
 
@@ -152,7 +164,6 @@ Keeping this in mind, here are some ways that may help you debug you ULP RISC-V 
 
  * Trap signal: the ULP RISC-V has a hardware trap that will trigger under certain conditions, e.g., illegal instruction. This will cause the main CPU to be woken up with the wake-up cause :cpp:enumerator:`ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG`.
 
-
 Application Examples
 --------------------
 
@@ -164,3 +175,5 @@ API Reference
 -------------
 
 .. include-build-file:: inc/ulp_riscv.inc
+.. include-build-file:: inc/ulp_riscv_lock_shared.inc
+.. include-build-file:: inc/ulp_riscv_lock.inc

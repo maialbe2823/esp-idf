@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2018-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,24 +9,23 @@
 #include "esp_system.h"
 #include "esp_private/system_internal.h"
 #include "esp_attr.h"
-#include "esp_efuse.h"
 #include "esp_log.h"
-#include "riscv/riscv_interrupts.h"
+#include "esp_rom_sys.h"
+#include "riscv/rv_utils.h"
 #include "riscv/interrupt.h"
 #include "esp_rom_uart.h"
 #include "soc/gpio_reg.h"
-#include "soc/rtc_cntl_reg.h"
-#include "soc/timer_group_reg.h"
 #include "esp_cpu.h"
 #include "soc/rtc.h"
+#include "esp_private/rtc_clk.h"
 #include "soc/rtc_periph.h"
-#include "soc/syscon_reg.h"
-#include "soc/system_reg.h"
+#include "soc/uart_reg.h"
 #include "hal/wdt_hal.h"
 #include "esp_private/cache_err_int.h"
 
 #include "esp32h2/rom/cache.h"
 #include "esp32h2/rom/rtc.h"
+#include "soc/pcr_reg.h"
 
 /* "inner" restart function for after RTOS, interrupts & anything else on this
  * core are already stopped. Stalls other core, resets hardware,
@@ -35,7 +34,7 @@
 void IRAM_ATTR esp_restart_noos(void)
 {
     // Disable interrupts
-    riscv_global_interrupts_disable();
+    rv_utils_intr_global_disable();
     // Enable RTC watchdog for 1 second
     wdt_hal_context_t rtc_wdt_ctx;
     wdt_hal_init(&rtc_wdt_ctx, WDT_RWDT, 0, false);
@@ -54,7 +53,7 @@ void IRAM_ATTR esp_restart_noos(void)
     const uint32_t core_id = esp_cpu_get_core_id();
 #if !CONFIG_FREERTOS_UNICORE
     const uint32_t other_core_id = (core_id == 0) ? 1 : 0;
-    esp_cpu_reset(other_core_id);
+    esp_rom_software_reset_cpu(other_core_id);
     esp_cpu_stall(other_core_id);
 #endif
 
@@ -78,31 +77,30 @@ void IRAM_ATTR esp_restart_noos(void)
     // 2nd stage bootloader reconfigures SPI flash signals.
     // Reset them to the defaults expected by ROM.
     WRITE_PERI_REG(GPIO_FUNC0_IN_SEL_CFG_REG, 0x30);
-    WRITE_PERI_REG(GPIO_FUNC1_IN_SEL_CFG_REG, 0x30);
-    WRITE_PERI_REG(GPIO_FUNC2_IN_SEL_CFG_REG, 0x30);
-    WRITE_PERI_REG(GPIO_FUNC3_IN_SEL_CFG_REG, 0x30);
-    WRITE_PERI_REG(GPIO_FUNC4_IN_SEL_CFG_REG, 0x30);
-    WRITE_PERI_REG(GPIO_FUNC5_IN_SEL_CFG_REG, 0x30);
 
-    // Reset timer/spi/uart
-    SET_PERI_REG_MASK(SYSTEM_PERIP_RST_EN0_REG,
-                      SYSTEM_TIMERS_RST | SYSTEM_SPI01_RST | SYSTEM_UART_RST | SYSTEM_SYSTIMER_RST);
-    SET_PERI_REG_MASK(SYSTEM_MODEM_RST_EN_REG,
-                      SYSTEM_IEEE802154BB_RST | SYSTEM_IEEE802154MAC_RST |
-                      SYSTEM_BT_RST | SYSTEM_BTMAC_RST |
-                      SYSTEM_EMAC_RST | SYSTEM_MACPWR_RST |
-                      SYSTEM_RW_BTMAC_RST | SYSTEM_RW_BTLP_RST
-                      );
-    REG_WRITE(SYSTEM_PERIP_RST_EN0_REG, 0);
-    REG_WRITE(SYSTEM_MODEM_RST_EN_REG, 0);
+    // Set Peripheral clk rst
+    SET_PERI_REG_MASK(PCR_TIMERGROUP0_CONF_REG, PCR_TG0_RST_EN);
+    SET_PERI_REG_MASK(PCR_TIMERGROUP1_CONF_REG, PCR_TG1_RST_EN);
+    SET_PERI_REG_MASK(PCR_MSPI_CONF_REG, PCR_MSPI_RST_EN);
+    SET_PERI_REG_MASK(PCR_UART0_CONF_REG, PCR_UART0_RST_EN);
+    SET_PERI_REG_MASK(PCR_UART1_CONF_REG, PCR_UART1_RST_EN);
+    SET_PERI_REG_MASK(PCR_SYSTIMER_CONF_REG, PCR_SYSTIMER_RST_EN);
+    SET_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
+    SET_PERI_REG_MASK(PCR_MODEM_CONF_REG, PCR_MODEM_RST_EN);
 
-    // Reset dma
-    SET_PERI_REG_MASK(SYSTEM_PERIP_RST_EN1_REG, SYSTEM_DMA_RST);
-    REG_WRITE(SYSTEM_PERIP_RST_EN1_REG, 0);
+    // Clear Peripheral clk rst
+    CLEAR_PERI_REG_MASK(PCR_TIMERGROUP0_CONF_REG, PCR_TG0_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_TIMERGROUP1_CONF_REG, PCR_TG1_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_MSPI_CONF_REG, PCR_MSPI_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_UART0_CONF_REG, PCR_UART0_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_UART1_CONF_REG, PCR_UART1_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_SYSTIMER_CONF_REG, PCR_SYSTIMER_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_GDMA_CONF_REG, PCR_GDMA_RST_EN);
+    CLEAR_PERI_REG_MASK(PCR_MODEM_CONF_REG, PCR_MODEM_RST_EN);
 
-    // Set CPU back to XTAL source, no PLL, same as hard reset
+    // Set CPU back to XTAL source, same as hard reset, but keep BBPLL on so that USB Serial JTAG can log at 1st stage bootloader.
 #if !CONFIG_IDF_ENV_FPGA
-    rtc_clk_cpu_freq_set_xtal();
+    rtc_clk_cpu_set_to_default_config();
 #endif
 
 #if !CONFIG_FREERTOS_UNICORE
@@ -114,17 +112,17 @@ void IRAM_ATTR esp_restart_noos(void)
     if (core_id == 0) {
         // Running on PRO CPU: APP CPU is stalled. Can reset both CPUs.
 #if !CONFIG_FREERTOS_UNICORE
-        esp_cpu_reset(1);
+        esp_rom_software_reset_cpu(1);
 #endif
-        esp_cpu_reset(0);
+        esp_rom_software_reset_cpu(0);
     }
 #if !CONFIG_FREERTOS_UNICORE
     else {
         // Running on APP CPU: need to reset PRO CPU and unstall it,
         // then reset APP CPU
-        esp_cpu_reset(0);
+        esp_rom_software_reset_cpu(0);
         esp_cpu_unstall(0);
-        esp_cpu_reset(1);
+        esp_rom_software_reset_cpu(1);
     }
 #endif
     while (true) {

@@ -8,12 +8,23 @@ This file is used in CI generate binary files for different kinds of apps
 import argparse
 import os
 import sys
+import unittest
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Set
+from typing import List, Optional, Set
 
+import yaml
 from idf_build_apps import LOGGER, App, build_apps, find_apps, setup_logging
-from idf_ci_utils import IDF_PATH, get_pytest_app_paths, get_pytest_cases, get_ttfw_app_paths
+from idf_build_apps.constants import SUPPORTED_TARGETS
+from idf_ci_utils import IDF_PATH, PytestApp, get_pytest_cases, get_ttfw_app_paths
+
+CI_ENV_VARS = {
+    'EXTRA_CFLAGS': '-Werror -Werror=deprecated-declarations -Werror=unused-variable '
+                    '-Werror=unused-but-set-variable -Werror=unused-function -Wstrict-prototypes',
+    'EXTRA_CXXFLAGS': '-Werror -Werror=deprecated-declarations -Werror=unused-variable '
+                      '-Werror=unused-but-set-variable -Werror=unused-function',
+    'LDGEN_CHECK_MAPPING': '1',
+}
 
 
 def get_pytest_apps(
@@ -21,9 +32,11 @@ def get_pytest_apps(
     target: str,
     config_rules_str: List[str],
     marker_expr: str,
+    filter_expr: str,
     preserve_all: bool = False,
+    extra_default_build_targets: Optional[List[str]] = None,
 ) -> List[App]:
-    pytest_cases = get_pytest_cases(paths, target, marker_expr)
+    pytest_cases = get_pytest_cases(paths, target, marker_expr, filter_expr)
 
     _paths: Set[str] = set()
     test_related_app_configs = defaultdict(set)
@@ -47,17 +60,26 @@ def get_pytest_apps(
     LOGGER.info(f'Found {len(app_dirs)} apps')
     app_dirs.sort()
 
+    default_size_json_path = 'size.json'
+    build_dir = 'build_@t_@w'
+    if target == 'linux':  # no idf_size.py for linux target
+        default_size_json_path = None  # type: ignore
+        # IDF-6644
+        # hard-coded in components/esp_partition/partition_linux.c
+        # const char *partition_table_file_name = "build/partition_table/partition-table.bin";
+        build_dir = 'build'
+
     apps = find_apps(
         app_dirs,
         target=target,
-        build_dir='build_@t_@w',
+        build_dir=build_dir,
         config_rules_str=config_rules_str,
         build_log_path='build_log.txt',
-        size_json_path='size.json',
+        size_json_path=default_size_json_path,
         check_warnings=True,
-        manifest_files=[
-            str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')
-        ],
+        manifest_files=[str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')],
+        default_build_targets=SUPPORTED_TARGETS + extra_default_build_targets,
+        manifest_rootpath=IDF_PATH,
     )
 
     for app in apps:
@@ -73,6 +95,7 @@ def get_cmake_apps(
     target: str,
     config_rules_str: List[str],
     preserve_all: bool = False,
+    extra_default_build_targets: Optional[List[str]] = None,
 ) -> List[App]:
     ttfw_app_dirs = get_ttfw_app_paths(paths, target)
     apps = find_apps(
@@ -85,18 +108,18 @@ def get_cmake_apps(
         size_json_path='size.json',
         check_warnings=True,
         preserve=False,
-        manifest_files=[
-            str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')
-        ],
+        manifest_files=[str(p) for p in Path(IDF_PATH).glob('**/.build-test-rules.yml')],
+        default_build_targets=SUPPORTED_TARGETS + extra_default_build_targets,
+        manifest_rootpath=IDF_PATH,
     )
 
     apps_for_build = []
-    pytest_app_dirs = get_pytest_app_paths(paths, target)
+    pytest_cases_apps = [app for case in get_pytest_cases(paths, target) for app in case.apps]
     for app in apps:
         if preserve_all or app.app_dir in ttfw_app_dirs:  # relpath
             app.preserve = True
 
-        if os.path.realpath(app.app_dir) in pytest_app_dirs:
+        if PytestApp(os.path.realpath(app.app_dir), app.target, app.config_name) in pytest_cases_apps:
             LOGGER.debug('Skipping build app with pytest scripts: %s', app)
             continue
 
@@ -109,14 +132,34 @@ APPS_BUILD_PER_JOB = 30
 
 
 def main(args: argparse.Namespace) -> None:
+    extra_default_build_targets: List[str] = []
+    if args.default_build_test_rules:
+        with open(args.default_build_test_rules) as fr:
+            configs = yaml.safe_load(fr)
+
+        if configs:
+            extra_default_build_targets = configs.get('extra_default_build_targets') or []
+
     if args.pytest_apps:
         LOGGER.info('Only build apps with pytest scripts')
         apps = get_pytest_apps(
-            args.paths, args.target, args.config, args.marker_expr, args.preserve_all
+            args.paths,
+            args.target,
+            args.config,
+            args.marker_expr,
+            args.filter_expr,
+            args.preserve_all,
+            extra_default_build_targets,
         )
     else:
         LOGGER.info('build apps. will skip pytest apps with pytest scripts')
-        apps = get_cmake_apps(args.paths, args.target, args.config, args.preserve_all)
+        apps = get_cmake_apps(
+            args.paths,
+            args.target,
+            args.config,
+            args.preserve_all,
+            extra_default_build_targets,
+        )
 
     LOGGER.info('Found %d apps after filtering', len(apps))
     LOGGER.info(
@@ -131,27 +174,24 @@ def main(args: argparse.Namespace) -> None:
             for extra_preserve_dir in args.extra_preserve_dirs:
                 abs_extra_preserve_dir = Path(extra_preserve_dir).resolve()
                 abs_app_dir = Path(app.app_dir).resolve()
-                if (
-                    abs_extra_preserve_dir == abs_app_dir
-                    or abs_extra_preserve_dir in abs_app_dir.parents
-                ):
+                if abs_extra_preserve_dir == abs_app_dir or abs_extra_preserve_dir in abs_app_dir.parents:
                     app.preserve = True
 
-    ret_code = build_apps(
-        apps,
-        parallel_count=args.parallel_count,
-        parallel_index=args.parallel_index,
-        dry_run=False,
-        build_verbose=args.build_verbose,
-        keep_going=True,
-        collect_size_info=args.collect_size_info,
-        collect_app_info=args.collect_app_info,
-        ignore_warning_strs=args.ignore_warning_str,
-        ignore_warning_file=args.ignore_warning_file,
-        copy_sdkconfig=args.copy_sdkconfig,
+    sys.exit(
+        build_apps(
+            apps,
+            parallel_count=args.parallel_count,
+            parallel_index=args.parallel_index,
+            dry_run=False,
+            build_verbose=args.build_verbose,
+            keep_going=True,
+            collect_size_info=args.collect_size_info,
+            collect_app_info=args.collect_app_info,
+            ignore_warning_strs=args.ignore_warning_str,
+            ignore_warning_file=args.ignore_warning_file,
+            copy_sdkconfig=args.copy_sdkconfig,
+        )
     )
-
-    sys.exit(ret_code)
 
 
 if __name__ == '__main__':
@@ -163,8 +203,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '-t',
         '--target',
-        required=True,
-        help='Build apps for given target. could pass "all" to get apps for all targets',
+        default='all',
+        help='Build apps for given target',
     )
     parser.add_argument(
         '--config',
@@ -193,9 +233,7 @@ if __name__ == '__main__':
         action='store_true',
         help='Preserve the binaries for all apps when specified.',
     )
-    parser.add_argument(
-        '--parallel-count', default=1, type=int, help='Number of parallel build jobs.'
-    )
+    parser.add_argument('--parallel-count', default=1, type=int, help='Number of parallel build jobs.')
     parser.add_argument(
         '--parallel-index',
         default=1,
@@ -247,8 +285,42 @@ if __name__ == '__main__':
         help='only build tests matching given mark expression. For example: -m "host_test and generic". Works only'
         'for pytest',
     )
+    parser.add_argument(
+        '-k',
+        '--filter-expr',
+        help='only build tests matching given filter expression. For example: -k "test_hello_world". Works only'
+        'for pytest',
+    )
+    parser.add_argument(
+        '--default-build-test-rules',
+        default=os.path.join(IDF_PATH, '.gitlab', 'ci', 'default-build-test-rules.yml'),
+        help='default build test rules config file',
+    )
+    parser.add_argument(
+        '--skip-setting-flags',
+        action='store_true',
+        help='by default this script would set the build flags exactly the same as the CI ones. '
+        'Set this flag to use your local build flags.',
+    )
 
     arguments = parser.parse_args()
 
     setup_logging(arguments.verbose)
+
+    # skip setting flags in CI
+    if not arguments.skip_setting_flags and not os.getenv('CI_JOB_ID'):
+        for _k, _v in CI_ENV_VARS.items():
+            os.environ[_k] = _v
+            LOGGER.info(f'env var {_k} set to "{_v}"')
+
     main(arguments)
+
+
+class TestParsingShellScript(unittest.TestCase):
+    """
+    This test case is run in CI jobs to make sure the CI build flags is the same as the ones recorded in CI_ENV_VARS
+    """
+
+    def test_parse_result(self) -> None:
+        for k, v in CI_ENV_VARS.items():
+            self.assertEqual(os.getenv(k), v)

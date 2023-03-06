@@ -38,7 +38,7 @@ Description of Components
 
 .. _user-guide-s3-devkitc-1-v1.1-board-front:
 
-.. figure:: ../../../_static/ESP32-S3-DevKitC-1_v1.1-annotated-photo.png
+.. figure:: ../../../_static/ESP32-S3-DevKitC-1_v2-annotated-photo.png
     :align: center
     :alt: ESP32-S3-DevKitC-1 - front
 
@@ -64,7 +64,7 @@ The key components of the board are described in a counter-clockwise direction.
      - Download button. Holding down **Boot** and then pressing **Reset** initiates Firmware Download mode for downloading firmware through the serial port.
    * - Reset Button
      - Press this button to restart the system.
-   * - ESP32-S3 USB Port
+   * - USB Port
      - ESP32-S3 full-speed USB OTG interface, compliant with the USB 1.1 specification. The interface is used for power supply to the board, for flashing applications to the chip, for communication with the chip using USB 1.1 protocols, as well as for JTAG debugging.
    * - USB-to-UART Bridge
      - Single USB-to-UART bridge chip provides transfer rates up to 3 Mbps.
@@ -75,7 +75,7 @@ The key components of the board are described in a counter-clockwise direction.
 
 .. note::
 
-    For boards with ESP32-S3-WROOM-2 modules, the pins GPIO35, GPIO36 and GPIO37 are used for the internal communication between ESP32-S3 and SPI flash/PSRAM memory, thus not available for external use.
+    For boards with Octal SPI flash/PSRAM memory embedded ESP32-S3-WROOM-1/1U modules, and boards with ESP32-S3-WROOM-2 modules, the pins GPIO35, GPIO36 and GPIO37 are used for the internal communication between ESP32-S3 and SPI flash/PSRAM memory, thus not available for external use.
 
 
 Start Application Development
@@ -99,7 +99,7 @@ Required Hardware
 Hardware Setup
 ^^^^^^^^^^^^^^
 
-Connect the board with the computer using **USB-to-UART Port**. Connection using **ESP32-S3 USB Port** is not fully implemented in software. In subsequent steps, **USB-to-UART Port** will be used by default.
+Connect the board with the computer using **USB-to-UART Port** or **ESP32-S3 USB Port**. In subsequent steps, **USB-to-UART Port** will be used by default.
 
 
 Software Setup
@@ -318,7 +318,7 @@ Related Documents
 - `ESP32-S3 Datasheet <https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf>`_ (PDF)
 - `ESP32-S3-WROOM-1 & ESP32-S3-WROOM-1U Datasheet <https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf>`_ (PDF)
 - `ESP32-S3-WROOM-2 Datasheet <https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-2_datasheet_en.pdf>`_ (PDF)
-- `ESP32-S3-DevKitC-1 Schematic <https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-DevKitC-1_V1.1_20220413.pdf>`_ (PDF)
+- `ESP32-S3-DevKitC-1 Schematic <https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-DevKitC-1_V1.1_20221130.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 PCB layout <https://dl.espressif.com/dl/schematics/PCB_ESP32-S3-DevKitC-1_V1.1_20220429.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 Dimensions <https://dl.espressif.com/dl/DXF_ESP32-S3-DevKitC-1_V1_20210312CB.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 Dimensions source file <https://dl.espressif.com/dl/DXF_ESP32-S3-DevKitC-1_V1_20210312CB.dxf>`_ (DXF) - You can view it with `Autodesk Viewer <https://viewer.autodesk.com/>`_ online

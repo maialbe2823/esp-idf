@@ -256,18 +256,14 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Set generator actions");
     for (int i = 0; i < 3; i++) {
-        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_timer_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
-                        MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH),
-                        MCPWM_GEN_TIMER_EVENT_ACTION_END()));
-        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
-                        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, comparators[i], MCPWM_GEN_ACTION_LOW),
-                        MCPWM_GEN_COMPARE_EVENT_ACTION_END()));
-        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_brake_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
-                        MCPWM_GEN_BRAKE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_OPER_BRAKE_MODE_CBC, MCPWM_GEN_ACTION_LOW),
-                        MCPWM_GEN_BRAKE_EVENT_ACTION_END()));
-        ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_brake_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
-                        MCPWM_GEN_BRAKE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_OPER_BRAKE_MODE_CBC, MCPWM_GEN_ACTION_LOW),
-                        MCPWM_GEN_BRAKE_EVENT_ACTION_END()));
+        ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
+                        MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));
+        ESP_ERROR_CHECK(mcpwm_generator_set_action_on_compare_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
+                        MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, comparators[i], MCPWM_GEN_ACTION_LOW)));
+        ESP_ERROR_CHECK(mcpwm_generator_set_action_on_brake_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
+                        MCPWM_GEN_BRAKE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_OPER_BRAKE_MODE_CBC, MCPWM_GEN_ACTION_LOW)));
+        ESP_ERROR_CHECK(mcpwm_generator_set_action_on_brake_event(generators[i][BLDC_MCPWM_GEN_INDEX_HIGH],
+                        MCPWM_GEN_BRAKE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_OPER_BRAKE_MODE_CBC, MCPWM_GEN_ACTION_LOW)));
     }
 
     ESP_LOGI(TAG, "Setup deadtime");
@@ -320,6 +316,15 @@ void app_main(void)
         };
         ESP_ERROR_CHECK(mcpwm_capture_channel_register_event_callbacks(cap_channels[i], &cbs, task_to_notify));
     }
+
+    ESP_LOGI(TAG, "Enable capture channels");
+    for (int i = 0; i < 3; i++) {
+        ESP_ERROR_CHECK(mcpwm_capture_channel_enable(cap_channels[i]));
+    }
+
+    ESP_LOGI(TAG, "Enable and start capture timer");
+    ESP_ERROR_CHECK(mcpwm_capture_timer_enable(cap_timer));
+    ESP_ERROR_CHECK(mcpwm_capture_timer_start(cap_timer));
 
     ESP_LOGI(TAG, "Start a timer to adjust motor speed periodically");
     esp_timer_handle_t periodic_timer = NULL;

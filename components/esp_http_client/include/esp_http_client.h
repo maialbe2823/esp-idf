@@ -129,6 +129,9 @@ typedef struct {
     bool                        is_async;                 /*!< Set asynchronous mode, only supported with HTTPS for now */
     bool                        use_global_ca_store;      /*!< Use a global ca_store for all the connections in which this bool is set. */
     bool                        skip_cert_common_name_check;    /*!< Skip any validation of server certificate CN field */
+    const char                  *common_name;             /*!< Pointer to the string containing server certificate common name.
+                                                               If non-NULL, server certificate CN must match this name,
+                                                               If NULL, server certificate CN must match hostname. */
     esp_err_t (*crt_bundle_attach)(void *conf);      /*!< Function pointer to esp_crt_bundle_attach. Enables the use of certification
                                                           bundle for server verification, must be enabled in menuconfig */
     bool                        keep_alive_enable;   /*!< Enable keep-alive timeout */
@@ -136,6 +139,9 @@ typedef struct {
     int                         keep_alive_interval; /*!< Keep-alive interval time. Default is 5 (second) */
     int                         keep_alive_count;    /*!< Keep-alive packet retry send count. Default is 3 counts */
     struct ifreq                *if_name;            /*!< The name of interface for data to go through. Use the default interface without setting */
+#if CONFIG_ESP_TLS_USE_SECURE_ELEMENT
+    bool use_secure_element;                /*!< Enable this option to use secure element */
+#endif
 } esp_http_client_config_t;
 
 /**
@@ -211,6 +217,18 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
  *  - ESP_FAIL on error
  */
 esp_err_t esp_http_client_perform(esp_http_client_handle_t client);
+
+/**
+ * @brief       Cancel an ongoing HTTP request. This API closes the current socket and opens a new socket with the same esp_http_client context.
+ *
+ * @param       client  The esp_http_client handle
+ * @return
+ *  - ESP_OK on successful
+ *  - ESP_FAIL on error
+ *  - ESP_ERR_INVALID_ARG
+ *  - ESP_ERR_INVALID_STATE
+ */
+esp_err_t esp_http_client_cancel_request(esp_http_client_handle_t client);
 
 /**
  * @brief      Set URL for client, when performing this behavior, the options in the URL will replace the old ones
@@ -519,6 +537,7 @@ esp_http_client_transport_t esp_http_client_get_transport_type(esp_http_client_h
  * @brief      Set redirection URL.
  *             When received the 30x code from the server, the client stores the redirect URL provided by the server.
  *             This function will set the current URL to redirect to enable client to execute the redirection request.
+ *             When `disable_auto_redirect` is set, the client will not call this function but the event `HTTP_EVENT_REDIRECT` will be dispatched giving the user contol over the redirection event.
  *
  * @param[in]  client  The esp_http_client handle
  *

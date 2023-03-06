@@ -10,6 +10,7 @@
 #include <esp_log.h>
 #include <esp_err.h>
 #include <http_parser.h>
+#include <inttypes.h>
 
 #include <esp_http_server.h>
 #include "esp_httpd_priv.h"
@@ -63,8 +64,9 @@ static esp_err_t verify_url (http_parser *parser)
     const char *at = parser_data->last.at;
     size_t  length = parser_data->last.length;
 
-    if ((r->method = parser->method) < 0) {
-        ESP_LOGW(TAG, LOG_FMT("HTTP Operation not supported"));
+    r->method = parser->method;
+    if (r->method < 0) {
+        ESP_LOGW(TAG, LOG_FMT("HTTP method not supported (%d)"), r->method);
         parser_data->error = HTTPD_501_METHOD_NOT_IMPLEMENTED;
         return ESP_FAIL;
     }
@@ -363,7 +365,7 @@ static esp_err_t cb_headers_complete(http_parser *parser)
     r->content_len = ((int)parser->content_length != -1 ?
                       parser->content_length : 0);
 
-    ESP_LOGD(TAG, LOG_FMT("bytes read     = %d"),  parser->nread);
+    ESP_LOGD(TAG, LOG_FMT("bytes read     = %" PRId32 ""),  parser->nread);
     ESP_LOGD(TAG, LOG_FMT("content length = %zu"), r->content_len);
 
     /* Handle upgrade requests - only WebSocket is supported for now */
@@ -400,6 +402,7 @@ static esp_err_t cb_headers_complete(http_parser *parser)
 
     parser_data->status = PARSING_BODY;
     ra->remaining_len = r->content_len;
+    esp_http_server_dispatch_event(HTTP_SERVER_EVENT_ON_HEADER, &(ra->sd->fd), sizeof(int));
     return ESP_OK;
 }
 
@@ -618,8 +621,8 @@ static esp_err_t httpd_parse_req(struct httpd_data *hd)
 {
     httpd_req_t *r = &hd->hd_req;
     int blk_len,  offset;
-    http_parser   parser;
-    parser_data_t parser_data;
+    http_parser   parser = {};
+    parser_data_t parser_data = {};
 
     /* Initialize parser */
     parse_init(r, &parser, &parser_data);
@@ -694,7 +697,7 @@ static void httpd_req_cleanup(httpd_req_t *r)
 
     /* Check if the context has changed and needs to be cleared */
     if ((r->ignore_sess_ctx_changes == false) && (ra->sd->ctx != r->sess_ctx)) {
-        httpd_sess_free_ctx(ra->sd->ctx, ra->sd->free_ctx);
+        httpd_sess_free_ctx(&ra->sd->ctx, ra->sd->free_ctx);
     }
 
 #if CONFIG_HTTPD_WS_SUPPORT

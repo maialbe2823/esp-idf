@@ -14,7 +14,6 @@
 
 #include "esp_err.h"
 #include "esp_partition.h"
-#include "spi_flash_mmap.h"
 #include "esp_image_format.h"
 #include "esp_secure_boot.h"
 #include "esp_flash_encrypt.h"
@@ -38,10 +37,12 @@
 #include "esp32c3/rom/secure_boot.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/secure_boot.h"
+#elif CONFIG_IDF_TARGET_ESP32H4
+#include "esp32h4/rom/secure_boot.h"
 #elif CONFIG_IDF_TARGET_ESP32C2
 #include "esp32c2/rom/secure_boot.h"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#include "esp32c6/rom/secure_boot.h"
 #endif
 
 #define SUB_TYPE_ID(i) (i & 0x0F)
@@ -84,16 +85,16 @@ static const esp_partition_t *read_otadata(esp_ota_select_entry_t *two_otadata)
         return NULL;
     }
 
-    spi_flash_mmap_handle_t ota_data_map;
+    esp_partition_mmap_handle_t ota_data_map;
     const void *result = NULL;
-    esp_err_t err = esp_partition_mmap(otadata_partition, 0, otadata_partition->size, SPI_FLASH_MMAP_DATA, &result, &ota_data_map);
+    esp_err_t err = esp_partition_mmap(otadata_partition, 0, otadata_partition->size, ESP_PARTITION_MMAP_DATA, &result, &ota_data_map);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "mmap otadata filed. Err=0x%8x", err);
         return NULL;
     } else {
         memcpy(&two_otadata[0], result, sizeof(esp_ota_select_entry_t));
         memcpy(&two_otadata[1], result + SPI_FLASH_SEC_SIZE, sizeof(esp_ota_select_entry_t));
-        spi_flash_munmap(ota_data_map);
+        esp_partition_munmap(ota_data_map);
     }
     return otadata_partition;
 }
@@ -651,8 +652,14 @@ esp_err_t esp_ota_get_partition_description(const esp_partition_t *partition, es
 
 #ifdef CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
 static esp_err_t esp_ota_set_anti_rollback(void) {
-    const esp_app_desc_t *app_desc = esp_ota_get_app_description();
-    return esp_efuse_update_secure_version(app_desc->secure_version);
+    const esp_partition_t* partition = esp_ota_get_running_partition();
+    esp_app_desc_t app_desc = {0};
+
+    esp_err_t err = esp_ota_get_partition_description(partition, &app_desc);
+    if (err == ESP_OK) {
+        return esp_efuse_update_secure_version(app_desc.secure_version);
+    }
+    return err;
 }
 #endif
 

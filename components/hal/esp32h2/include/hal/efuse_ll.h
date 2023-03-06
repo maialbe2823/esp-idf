@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -32,12 +32,12 @@ __attribute__((always_inline)) static inline uint32_t efuse_ll_get_wdt_delay_sel
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_mac0(void)
 {
-    return EFUSE.rd_mac_spi_sys_0.mac_0;
+    return EFUSE.rd_mac_sys_0.mac_0;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_mac1(void)
 {
-    return EFUSE.rd_mac_spi_sys_1.mac_1;
+    return EFUSE.rd_mac_sys_1.mac_1;
 }
 
 __attribute__((always_inline)) static inline bool efuse_ll_get_secure_boot_v2_en(void)
@@ -48,38 +48,38 @@ __attribute__((always_inline)) static inline bool efuse_ll_get_secure_boot_v2_en
 // use efuse_hal_get_major_chip_version() to get major chip version
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_wafer_version_major(void)
 {
-    return EFUSE.rd_mac_spi_sys_3.wafer_version;
+    return EFUSE.rd_mac_sys_3.wafer_version_major;
 }
 
 // use efuse_hal_get_minor_chip_version() to get minor chip version
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_wafer_version_minor(void)
 {
-    return 0;
+    return EFUSE.rd_mac_sys_3.wafer_version_minor;
 }
 
 __attribute__((always_inline)) static inline bool efuse_ll_get_disable_wafer_version_major(void)
 {
-    return 0;
+    return EFUSE.rd_mac_sys_3.disable_wafer_version_major;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_blk_version_major(void)
 {
-    return 0;
+    return EFUSE.rd_sys_part1_data4.blk_version_major;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_blk_version_minor(void)
 {
-    return 0;
+    return EFUSE.rd_sys_part1_data4.blk_version_minor;
 }
 
 __attribute__((always_inline)) static inline bool efuse_ll_get_disable_blk_version_major(void)
 {
-    return 0;
+    return EFUSE.rd_sys_part1_data4.disable_blk_version_major;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_ver_pkg(void)
 {
-    return EFUSE.rd_mac_spi_sys_3.pkg_version;
+    return EFUSE.rd_mac_sys_4.pkg_version;
 }
 
 /******************* eFuse control functions *************************/

@@ -1,6 +1,6 @@
 LED Control (LEDC)
 ==================
-{IDF_TARGET_LEDC_CHAN_NUM:default="8", esp32="16", esp32s2="8", esp32c3="6", esp32s3="8", esp32c2="6", esp32h2="6"}
+{IDF_TARGET_LEDC_CHAN_NUM:default="6", esp32="16", esp32s2="8", esp32s3="8"}
 
 :link_to_translation:`zh_CN:[中文]`
 
@@ -42,6 +42,10 @@ As an optional step, it is also possible to set up an interrupt on fade end.
 
     Key Settings of LED PWM Controller's API
 
+.. note::
+
+    For an initial setup, it is recommended to configure for the timers first (by calling :cpp:func:`ledc_timer_config`), and then for the channels (by calling :cpp:func:`ledc_channel_config`). This ensures the PWM frequency is at the desired value since the appearance of the PWM signal from the IO pad.
+
 
 .. _ledc-api-configure-timer:
 
@@ -81,7 +85,7 @@ The source clock can also limit the PWM frequency. The higher the source clock f
          - 1 MHz
          - High / Low
          - Dynamic Frequency Scaling compatible
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - Low
          - Dynamic Frequency Scaling compatible, Light sleep compatible
@@ -101,7 +105,7 @@ The source clock can also limit the PWM frequency. The higher the source clock f
        * - REF_TICK
          - 1 MHz
          - Dynamic Frequency Scaling compatible
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - Dynamic Frequency Scaling compatible, Light sleep compatible
        * - XTAL_CLK
@@ -120,7 +124,7 @@ The source clock can also limit the PWM frequency. The higher the source clock f
        * - APB_CLK
          - 80 MHz
          - /
-       * - RTC20M_CLK
+       * - RC_FAST_CLK
          - ~20 MHz
          - Dynamic Frequency Scaling compatible, Light sleep compatible
        * - XTAL_CLK
@@ -139,7 +143,26 @@ The source clock can also limit the PWM frequency. The higher the source clock f
        * - PLL_60M_CLK
          - 60 MHz
          - /
-       * - RTC20M_CLK
+       * - RC_FAST_CLK
+         - ~20 MHz
+         - Dynamic Frequency Scaling compatible, Light sleep compatible
+       * - XTAL_CLK
+         - 40 MHz
+         - Dynamic Frequency Scaling compatible
+
+.. only:: esp32c6
+
+    .. list-table:: Characteristics of {IDF_TARGET_NAME} LEDC source clocks
+       :widths: 15 15 30
+       :header-rows: 1
+
+       * - Clock name
+         - Clock freq
+         - Clock capabilities
+       * - PLL_80M_CLK
+         - 80 MHz
+         - /
+       * - RC_FAST_CLK
          - ~20 MHz
          - Dynamic Frequency Scaling compatible, Light sleep compatible
        * - XTAL_CLK
@@ -155,10 +178,29 @@ The source clock can also limit the PWM frequency. The higher the source clock f
        * - Clock name
          - Clock freq
          - Clock capabilities
+       * - PLL_96M_CLK
+         - 96 MHz
+         - /
+       * - RC_FAST_CLK
+         - ~8 MHz
+         - Dynamic Frequency Scaling compatible, Light sleep compatible
+       * - XTAL_CLK
+         - 32 MHz
+         - Dynamic Frequency Scaling compatible
+
+.. only:: esp32h4
+
+    .. list-table:: Characteristics of {IDF_TARGET_NAME} LEDC source clocks
+       :widths: 15 15 30
+       :header-rows: 1
+
+       * - Clock name
+         - Clock freq
+         - Clock capabilities
        * - APB_CLK
          - 96 MHz
          - /
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - Dynamic Frequency Scaling compatible, Light sleep compatible
        * - XTAL_CLK
@@ -167,13 +209,13 @@ The source clock can also limit the PWM frequency. The higher the source clock f
 
 .. note::
 
-    .. only:: not esp32h2
+    .. only:: SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
 
-        1. On {IDF_TARGET_NAME}, if RTCxM_CLK is chosen as the LEDC clock source, an internal calibration will be performed to get the exact frequency of the clock. This ensures the accuracy of output PWM signal frequency.
+        1. On {IDF_TARGET_NAME}, if RC_FAST_CLK is chosen as the LEDC clock source, an internal calibration will be performed to get the exact frequency of the clock. This ensures the accuracy of output PWM signal frequency.
 
-    .. only:: esp32h2
+    .. only:: not SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
 
-        1. On {IDF_TARGET_NAME}, if RTC8M_CLK is chosen as the LEDC clock source, you may see the frequency of output PWM signal is not very accurate. This is because no internal calibration is performed to get the exact frequency of the clock due to hardware limitation, a theoretic frequency value is used.
+        1. On {IDF_TARGET_NAME}, if RC_FAST_CLK is chosen as the LEDC clock source, you may see the frequency of output PWM signal is not very accurate. This is because no internal calibration is performed to get the exact frequency of the clock due to hardware limitation, a theoretic frequency value is used.
 
     .. only:: not SOC_LEDC_HAS_TIMER_SPECIFIC_MUX
 
@@ -235,7 +277,7 @@ The LEDC hardware provides the means to gradually transition from one duty cycle
 
     Start fading with :cpp:func:`ledc_fade_start`. A fade can be operated in blocking or non-blocking mode, please check :cpp:enum:`ledc_fade_mode_t` for the difference between the two available fade modes. Note that with either fade mode, the next fade or fixed-duty update will not take effect until the last fade finishes or is stopped. :cpp:func:`ledc_fade_stop` has to be called to stop a fade that is in progress.
 
-To get a notification about the completion of a fade operation, a fade end callback function can be registered for each channel by calling :cpp:func:`ledc_cb_register` after the fade service being installed.
+To get a notification about the completion of a fade operation, a fade end callback function can be registered for each channel by calling :cpp:func:`ledc_cb_register` after the fade service being installed. The fade end callback prototype is defined in :cpp:type:`ledc_cb_t`, where you should return a boolean value from the callback function, indicating whether a high priority task is woken up by this callback function. It is worth mentioning, the callback and the function invoked by itself should be placed in IRAM, as the interrupt service routine is in IRAM. :cpp:func:`ledc_cb_register` will print a warning message if it finds the addresses of callback and user context are incorrect.
 
 If not required anymore, fading and an associated interrupt can be disabled with :cpp:func:`ledc_fade_func_uninstall`.
 

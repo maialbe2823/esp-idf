@@ -699,7 +699,7 @@ void bta_gatts_indicate_handle (tBTA_GATTS_CB *p_cb, tBTA_GATTS_DATA *p_msg)
             cb_data.req_data.data_len = 0;
             cb_data.req_data.handle = p_msg->api_indicate.attr_id;
 
-            if (p_msg->api_indicate.value && (p_msg->api_indicate.len > 0)) {
+            if (p_msg->api_indicate.len > 0) {
                 cb_data.req_data.value = (uint8_t *) osi_malloc(p_msg->api_indicate.len);
                 if (cb_data.req_data.value != NULL) {
                     memset(cb_data.req_data.value, 0, p_msg->api_indicate.len);
@@ -709,9 +709,7 @@ void bta_gatts_indicate_handle (tBTA_GATTS_CB *p_cb, tBTA_GATTS_DATA *p_msg)
                     APPL_TRACE_ERROR("%s, malloc failed", __func__);
                 }
             } else {
-                if (p_msg->api_indicate.value) {
-                    APPL_TRACE_ERROR("%s, incorrect length", __func__);
-                }
+                APPL_TRACE_ERROR("%s, incorrect length", __func__);
             }
             (*p_rcb->p_cback)(BTA_GATTS_CONF_EVT, &cb_data);
             if (cb_data.req_data.value != NULL) {
@@ -1003,6 +1001,10 @@ static void bta_gatts_conn_cback (tGATT_IF gatt_if, BD_ADDR bda, UINT16 conn_id,
                 cb_data.conn.conn_params.latency = p_lcb->current_used_conn_latency;
                 cb_data.conn.conn_params.timeout = p_lcb->current_used_conn_timeout;
                 cb_data.conn.link_role = p_lcb->link_role;
+                #if (BLE_INCLUDED == TRUE)
+                cb_data.conn.ble_addr_type = p_lcb->ble_addr_type;
+                #endif
+                cb_data.conn.conn_handle = p_lcb->handle;
             }else {
                 APPL_TRACE_WARNING("%s not found connection parameters of the device ", __func__);
             }

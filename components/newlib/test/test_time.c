@@ -14,7 +14,6 @@
 #include "freertos/semphr.h"
 #include "sdkconfig.h"
 #include "soc/rtc.h"
-#include "soc/rtc_cntl_reg.h"
 #include "esp_system.h"
 #include "test_utils.h"
 #include "esp_log.h"
@@ -36,13 +35,18 @@
 #include "esp32s3/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32H4
+#include "esp32h4/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C2
 #include "esp32c2/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#include "esp32c6/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32H2
+#include "esp32h2/rtc.h"
 #endif
 
 #if portNUM_PROCESSORS == 2
+#include "soc/rtc_cntl_reg.h"
 
 // This runs on APP CPU:
 static void time_adc_test_task(void* arg)
@@ -541,8 +545,6 @@ TEST_CASE("test time functions wide 64 bits", "[newlib]")
 #endif // !_USE_LONG_TIME_T
 
 #if defined( CONFIG_ESP_TIME_FUNCS_USE_ESP_TIMER ) && defined( CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER )
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
-//IDF-5057
 
 extern int64_t s_microseconds_offset;
 static const uint64_t s_start_timestamp  = 1606838354;
@@ -641,5 +643,4 @@ static void check_time(void)
 TEST_CASE_MULTIPLE_STAGES("Timestamp after abort is correct in case RTC & High-res timer have + big error", "[newlib][reset=abort,SW_CPU_RESET]", set_timestamp1, check_time);
 TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & High-res timer have + big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp2, check_time);
 TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & High-res timer have - big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp3, check_time);
-#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
 #endif // CONFIG_ESP_TIME_FUNCS_USE_ESP_TIMER && CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER

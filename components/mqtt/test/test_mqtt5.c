@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,7 +17,9 @@
 #include "test_mqtt5_client_broker.h"
 #include "test_mqtt_connection.h"
 #include "esp_mac.h"
+#include "esp_partition.h"
 
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C6, ESP32H2)
 static esp_mqtt5_user_property_item_t user_property_arr[3] = {
     {"board", "esp32"},
     {"u", "user"},
@@ -88,10 +90,10 @@ TEST_CASE("mqtt5 init and deinit", "[mqtt5][leaks=0]")
 
 static const char* this_bin_addr(void)
 {
-    spi_flash_mmap_handle_t out_handle;
+    esp_partition_mmap_handle_t out_handle;
     const void *binary_address;
     const esp_partition_t* partition = esp_ota_get_running_partition();
-    esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &binary_address, &out_handle);
+    esp_partition_mmap(partition, 0, partition->size, ESP_PARTITION_MMAP_DATA, &binary_address, &out_handle);
     return binary_address;
 }
 
@@ -149,3 +151,4 @@ TEST_CASE("mqtt5 broker tests", "[mqtt5][test_env=UT_T2_Ethernet]")
     connect_test_fixture_teardown();
 }
 #endif // SOC_EMAC_SUPPORTED
+#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C6, ESP32H2)

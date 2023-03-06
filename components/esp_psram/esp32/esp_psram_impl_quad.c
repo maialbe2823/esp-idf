@@ -15,16 +15,17 @@
 #include "esp_err.h"
 #include "esp_types.h"
 #include "esp_log.h"
-#include "esp_efuse.h"
 #include "../esp_psram_impl.h"
 #include "esp32/rom/spi_flash.h"
 #include "esp32/rom/cache.h"
 #include "esp32/rom/efuse.h"
+#include "esp32/rom/gpio.h"
 #include "esp_rom_efuse.h"
 #include "soc/dport_reg.h"
 #include "soc/efuse_periph.h"
 #include "soc/soc_caps.h"
 #include "soc/spi_periph.h"
+#include "soc/chip_revision.h"
 #include "driver/gpio.h"
 #include "hal/efuse_hal.h"
 #include "hal/gpio_hal.h"
@@ -133,11 +134,14 @@ typedef enum {
 } psram_cache_speed_t;
 
 #if CONFIG_SPIRAM_SPEED_40M && CONFIG_ESPTOOLPY_FLASHFREQ_40M
-#define PSRAM_SPEED PSRAM_CACHE_F40M_S40M
+#define PSRAM_SPEED           PSRAM_CACHE_F40M_S40M
+#define PSRAM_CS_HOLD_TIME    0
 #elif CONFIG_SPIRAM_SPEED_40M && CONFIG_ESPTOOLPY_FLASHFREQ_80M
-#define PSRAM_SPEED PSRAM_CACHE_F80M_S40M
+#define PSRAM_SPEED           PSRAM_CACHE_F80M_S40M
+#define PSRAM_CS_HOLD_TIME    0
 #elif CONFIG_SPIRAM_SPEED_80M && CONFIG_ESPTOOLPY_FLASHFREQ_80M
-#define PSRAM_SPEED PSRAM_CACHE_F80M_S80M
+#define PSRAM_SPEED           PSRAM_CACHE_F80M_S80M
+#define PSRAM_CS_HOLD_TIME    1
 #else
 #error "FLASH speed can only be equal to or higher than SRAM speed while SRAM is enabled!"
 #endif
@@ -680,7 +684,7 @@ void psram_set_cs_timing(psram_spi_num_t spi_num, psram_clk_mode_t clk_mode)
     if (clk_mode == PSRAM_CLK_MODE_NORM) {
         SET_PERI_REG_MASK(SPI_USER_REG(spi_num), SPI_CS_HOLD_M | SPI_CS_SETUP_M);
         // Set cs time.
-        SET_PERI_REG_BITS(SPI_CTRL2_REG(spi_num), SPI_HOLD_TIME_V, 1, SPI_HOLD_TIME_S);
+        SET_PERI_REG_BITS(SPI_CTRL2_REG(spi_num), SPI_HOLD_TIME_V, PSRAM_CS_HOLD_TIME, SPI_HOLD_TIME_S);
         SET_PERI_REG_BITS(SPI_CTRL2_REG(spi_num), SPI_SETUP_TIME_V, 0, SPI_SETUP_TIME_S);
     } else {
         CLEAR_PERI_REG_MASK(SPI_USER_REG(spi_num), SPI_CS_HOLD_M | SPI_CS_SETUP_M);
@@ -819,7 +823,7 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
 {
     psram_cache_speed_t mode = PSRAM_SPEED;
     psram_io_t psram_io={0};
-    uint32_t pkg_ver = esp_efuse_get_pkg_ver();
+    uint32_t pkg_ver = efuse_ll_get_chip_ver_pkg();
     if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32D2WDQ5) {
         ESP_EARLY_LOGI(TAG, "This chip is ESP32-D2WD");
         rtc_vddsdio_config_t cfg = rtc_vddsdio_get_config();
@@ -829,7 +833,7 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
         }
         psram_io.psram_clk_io = D2WD_PSRAM_CLK_IO;
         psram_io.psram_cs_io  = D2WD_PSRAM_CS_IO;
-    } else if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4 && efuse_hal_get_major_chip_version() >= 3) {
+    } else if (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4 && ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 300)) {
         ESP_EARLY_LOGE(TAG, "This chip is ESP32-PICO-V3. It does not support PSRAM (disable it in Kconfig)");
         abort();
     } else if ((pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD2) || (pkg_ver == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4)) {
@@ -944,8 +948,8 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
          */
         psram_read_id(spi_num, &s_psram_id);
         if (!PSRAM_IS_VALID(s_psram_id)) {
-            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x", (uint32_t)s_psram_id);
-            return ESP_FAIL;
+            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x, PSRAM chip not found or not supported", (uint32_t)s_psram_id);
+            return ESP_ERR_NOT_SUPPORTED;
         }
     }
 

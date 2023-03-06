@@ -44,7 +44,7 @@ if(NOT "$ENV{IDF_COMPONENT_MANAGER}" EQUAL "0")
     idf_build_set_property(IDF_COMPONENT_MANAGER 1)
 endif()
 # Set component manager interface version
-idf_build_set_property(__COMPONENT_MANAGER_INTERFACE_VERSION 1)
+idf_build_set_property(__COMPONENT_MANAGER_INTERFACE_VERSION 2)
 
 #
 # Get the project version from either a version file or the Git revision. This is passed
@@ -104,7 +104,7 @@ function(paths_with_spaces_to_list variable_name)
 endfunction()
 
 #
-# Output the built components to the user. Generates files for invoking idf_monitor.py
+# Output the built components to the user. Generates files for invoking esp_idf_monitor
 # that doubles as an overview of some of the more important build properties.
 #
 function(__project_info test_components)
@@ -152,6 +152,12 @@ function(__project_info test_components)
     idf_build_get_property(COMPONENT_KCONFIGS KCONFIGS)
     idf_build_get_property(COMPONENT_KCONFIGS_PROJBUILD KCONFIG_PROJBUILDS)
     idf_build_get_property(debug_prefix_map_gdbinit DEBUG_PREFIX_MAP_GDBINIT)
+
+    if(CONFIG_APP_BUILD_TYPE_RAM)
+        set(PROJECT_BUILD_TYPE ram_app)
+    else()
+        set(PROJECT_BUILD_TYPE flash_app)
+    endif()
 
     # Write project description JSON file
     idf_build_get_property(build_dir BUILD_DIR)
@@ -344,6 +350,12 @@ macro(project project_name)
     # Generate compile_commands.json (needs to come after project call).
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+    # If CMAKE_COLOR_DIAGNOSTICS not set in project CMakeLists.txt or in the environment,
+    # enable it by default.
+    if(NOT DEFINED CMAKE_COLOR_DIAGNOSTICS AND NOT DEFINED ENV{CMAKE_COLOR_DIAGNOSTICS})
+        set(CMAKE_COLOR_DIAGNOSTICS ON)
+    endif()
+
     # Since components can import third-party libraries, the original definition of project() should be restored
     # before the call to add components to the build.
     function(project)
@@ -390,7 +402,14 @@ macro(project project_name)
     # PROJECT_NAME is taken from the passed name from project() call
     # PROJECT_DIR is set to the current directory
     # PROJECT_VER is from the version text or git revision of the current repo
-    set(_sdkconfig_defaults "$ENV{SDKCONFIG_DEFAULTS}")
+
+    # SDKCONFIG_DEFAULTS environment variable may specify a file name relative to the root of the project.
+    # When building the bootloader, ignore this variable, since:
+    # 1. The bootloader project uses an existing SDKCONFIG file from the top-level project
+    # 2. File specified by SDKCONFIG_DEFAULTS will not be found relative to the root of the bootloader project
+    if(NOT BOOTLOADER_BUILD)
+        set(_sdkconfig_defaults "$ENV{SDKCONFIG_DEFAULTS}")
+    endif()
 
     if(NOT _sdkconfig_defaults)
         if(EXISTS "${CMAKE_SOURCE_DIR}/sdkconfig.defaults")
@@ -499,27 +518,56 @@ macro(project project_name)
         list(REMOVE_ITEM build_components ${test_components})
     endif()
 
+    if(CONFIG_IDF_TARGET_LINUX AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+        # Compiling for the host, and the host is macOS, so the linker is Darwin LD.
+        # Note, when adding support for Clang and LLD based toolchain this check will
+        # need to be modified.
+        set(linker_type "Darwin")
+    else()
+        set(linker_type "GNU")
+    endif()
+
     foreach(build_component ${build_components})
         __component_get_target(build_component_target ${build_component})
         __component_get_property(whole_archive ${build_component_target} WHOLE_ARCHIVE)
         if(whole_archive)
-            message(STATUS "Component ${build_component} will be linked with -Wl,--whole-archive")
-            target_link_libraries(${project_elf} PRIVATE
-                                  "-Wl,--whole-archive"
-                                   ${build_component}
-                                   "-Wl,--no-whole-archive")
+            if(linker_type STREQUAL "GNU")
+                message(STATUS "Component ${build_component} will be linked with -Wl,--whole-archive")
+                target_link_libraries(${project_elf} PRIVATE
+                                       "-Wl,--whole-archive"
+                                       ${build_component}
+                                       "-Wl,--no-whole-archive")
+            elseif(linker_type STREQUAL "Darwin")
+                message(STATUS "Component ${build_component} will be linked with -Wl,-force_load")
+                target_link_libraries(${project_elf} PRIVATE
+                                       "-Wl,-force_load"
+                                       ${build_component})
+            endif()
         else()
             target_link_libraries(${project_elf} PRIVATE ${build_component})
         endif()
     endforeach()
 
 
-    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    if(linker_type STREQUAL "GNU")
         set(mapfile "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.map")
         set(idf_target "${IDF_TARGET}")
         string(TOUPPER ${idf_target} idf_target)
-        target_link_libraries(${project_elf} PRIVATE "-Wl,--cref" "-Wl,--defsym=IDF_TARGET_${idf_target}=0"
-        "-Wl,--Map=\"${mapfile}\"")
+        # Add cross-reference table to the map file
+        target_link_options(${project_elf} PRIVATE "-Wl,--cref")
+        # Add this symbol as a hint for idf_size.py to guess the target name
+        target_link_options(${project_elf} PRIVATE "-Wl,--defsym=IDF_TARGET_${idf_target}=0")
+        # Enable map file output
+        target_link_options(${project_elf} PRIVATE "-Wl,--Map=${mapfile}")
+        # Check if linker supports --no-warn-rwx-segments
+        execute_process(COMMAND ${CMAKE_LINKER} "--no-warn-rwx-segments" "--version"
+            RESULT_VARIABLE result
+            OUTPUT_QUIET
+            ERROR_QUIET)
+        if(${result} EQUAL 0)
+            # Do not print RWX segment warnings
+            target_link_options(${project_elf} PRIVATE "-Wl,--no-warn-rwx-segments")
+        endif()
         unset(idf_target)
     endif()
 
@@ -531,23 +579,44 @@ macro(project project_name)
     idf_build_get_property(python PYTHON)
 
     set(idf_size ${python} ${idf_path}/tools/idf_size.py)
-    if(DEFINED OUTPUT_JSON AND OUTPUT_JSON)
-        list(APPEND idf_size "--json")
-    endif()
 
     # Add size targets, depend on map file, run idf_size.py
+    # OUTPUT_JSON is passed for compatibility reasons, SIZE_OUTPUT_FORMAT
+    # environment variable is recommended and has higher priority
     add_custom_target(size
+        COMMAND ${CMAKE_COMMAND}
+        -D "IDF_SIZE_TOOL=${idf_size}"
+        -D "MAP_FILE=${mapfile}"
+        -D "OUTPUT_JSON=${OUTPUT_JSON}"
+        -P "${idf_path}/tools/cmake/run_size_tool.cmake"
         DEPENDS ${mapfile}
-        COMMAND ${idf_size} ${mapfile}
-        )
+        USES_TERMINAL
+        VERBATIM
+    )
+
     add_custom_target(size-files
+        COMMAND ${CMAKE_COMMAND}
+        -D "IDF_SIZE_TOOL=${idf_size}"
+        -D "IDF_SIZE_MODE=--files"
+        -D "MAP_FILE=${mapfile}"
+        -D "OUTPUT_JSON=${OUTPUT_JSON}"
+        -P "${idf_path}/tools/cmake/run_size_tool.cmake"
         DEPENDS ${mapfile}
-        COMMAND ${idf_size} --files ${mapfile}
-        )
+        USES_TERMINAL
+        VERBATIM
+    )
+
     add_custom_target(size-components
+        COMMAND ${CMAKE_COMMAND}
+        -D "IDF_SIZE_TOOL=${idf_size}"
+        -D "IDF_SIZE_MODE=--archives"
+        -D "MAP_FILE=${mapfile}"
+        -D "OUTPUT_JSON=${OUTPUT_JSON}"
+        -P "${idf_path}/tools/cmake/run_size_tool.cmake"
         DEPENDS ${mapfile}
-        COMMAND ${idf_size} --archives ${mapfile}
-        )
+        USES_TERMINAL
+        VERBATIM
+    )
 
     unset(idf_size)
 

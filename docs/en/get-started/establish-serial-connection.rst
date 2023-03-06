@@ -5,7 +5,7 @@ Establish Serial Connection with {IDF_TARGET_NAME}
 
 .. only:: not SOC_USB_OTG_SUPPORTED and not SOC_USB_SERIAL_JTAG_SUPPORTED
 
-    Establishing a serial connection with the {IDF_TARGET_NAME} target device could be done using a USB-to-UART bridge. 
+    Establishing a serial connection with the {IDF_TARGET_NAME} target device could be done using a USB-to-UART bridge.
 
 .. only:: SOC_USB_OTG_SUPPORTED or SOC_USB_SERIAL_JTAG_SUPPORTED
 
@@ -33,7 +33,7 @@ Some development boards have the USB-to-UART bridge installed. If a board does n
             default_fontsize = 16
 
             # labels of diagram nodes
-            PC [label="Personal\n Computer"];  
+            PC [label="Personal\n Computer"];
             CHIP [label="{IDF_TARGET_NAME}", width=120];
             DUMMY [shape=none, width=1]
 
@@ -71,8 +71,8 @@ For boards with an installed USB-to-UART bridge, the connection between the pers
         default_fontsize = 16
 
         # labels of diagram nodes
-        PC [label="Personal\nComputer"];  
-        BRIDGE [label="USB-to-UART\n Bridge"];  
+        PC [label="Personal\nComputer"];
+        BRIDGE [label="USB-to-UART\n Bridge"];
         CHIP [label="{IDF_TARGET_NAME}", width=120];
 
             # node connections
@@ -83,7 +83,7 @@ For boards with an installed USB-to-UART bridge, the connection between the pers
                 shape = line;
                 style = dotted;
                 color = "#FF0000";
-                label = "Developmment Board\n\n\n";
+                label = "Development Board\n\n\n";
                 BRIDGE; CHIP;
             }
     }
@@ -106,8 +106,8 @@ Sometimes the USB-to-UART bridge is external. This is often used in small develo
         default_fontsize = 16
 
         # labels of diagram nodes
-        PC [label="Personal\n Computer"];  
-        BRIDGE [label="USB-to-UART\n Bridge", width=180];  
+        PC [label="Personal\n Computer"];
+        BRIDGE [label="USB-to-UART\n Bridge", width=180];
         CHIP [label="{IDF_TARGET_NAME}", width=120];
         DUMMY [shape=none, width=1]
 
@@ -121,7 +121,7 @@ Sometimes the USB-to-UART bridge is external. This is often used in small develo
                 shape = line;
                 style = dotted;
                 color = "#FF0000";
-                label = "Programmmer Board\n\n\n";
+                label = "Programmer Board\n\n\n";
                 BRIDGE
             }
             group {
@@ -132,23 +132,27 @@ Sometimes the USB-to-UART bridge is external. This is often used in small develo
                 CHIP; DUMMY;
             }
     }
-    
+
 
 .. only:: SOC_USB_OTG_SUPPORTED or SOC_USB_SERIAL_JTAG_SUPPORTED
 
     Flash using USB
     ---------------
-    
+
     For the {IDF_TARGET_NAME}, the USB peripheral is available, allowing you to flash the binaries without the need for an external USB-to-UART bridge.
 
-    {IDF_TARGET_USB_PIN_DM:default="Not Updated!", esp32c3="GPIO18", esp32s3="GPIO19", esp32s2="GPIO19"}
-    {IDF_TARGET_USB_PIN_DP:default="Not Updated!", esp32c3="GPIO19", esp32s3="GPIO20", esp32s2="GPIO20"}
-    
+    {IDF_TARGET_USB_PIN_DM:default="Not Updated!", esp32c3="GPIO18", esp32s3="GPIO19", esp32s2="GPIO19", esp32c6="GPIO12"}
+    {IDF_TARGET_USB_PIN_DP:default="Not Updated!", esp32c3="GPIO19", esp32s3="GPIO20", esp32s2="GPIO20", esp32c6="GPIO13"}
+
     The USB on the {IDF_TARGET_NAME} uses the **{IDF_TARGET_USB_PIN_DP}** for **D+** and **{IDF_TARGET_USB_PIN_DM}** for **D-**.
 
-    .. only:: SOC_USB_SERIAL_JTAG_SUPPORTED
+    .. only:: SOC_USB_SERIAL_JTAG_SUPPORTED and not esp32s3
 
         .. note:: The {IDF_TARGET_NAME} supports only *USB CDC and JTAG*.
+
+        If you are flashing for the first time, you need to get the {IDF_TARGET_NAME} into the download mode manually. To do so, press and hold the ``BOOT`` button and then press the ``RESET`` button once. After that release the ``BOOT`` button.
+
+    .. only:: esp32s3
 
         If you are flashing for the first time, you need to get the {IDF_TARGET_NAME} into the download mode manually. To do so, press and hold the ``BOOT`` button and then press the ``RESET`` button once. After that release the ``BOOT`` button.
 
@@ -182,7 +186,7 @@ For devices downloaded using a USB-to-UART bridge, you can run the following com
 You can change the flasher baud rate by replacing ``BAUD`` with the baud rate you need. The default baud rate is ``460800``.
 
 .. note::
-    
+
     If the device does not support the auto download mode, you need to get into the download mode manually. To do so, press and hold the ``BOOT`` button and then press the ``RESET`` button once. After that release the ``BOOT`` button.
 
 Check port on Windows
@@ -243,12 +247,20 @@ Verify serial connection
 
 Now verify that the serial connection is operational. You can do this using a serial terminal program by checking if you get any output on the terminal after resetting {IDF_TARGET_NAME}.
 
+.. only:: esp32c2
+
+    The default console baud rate on ESP32-C2 is 115200 when a 40 MHz XTAL is used, or 74880 when a 26 MHz XTAL is used.
+
+.. only:: not esp32c2
+
+    The default console baud rate on {IDF_TARGET_NAME} is 115200.
+
 Windows and Linux
 ^^^^^^^^^^^^^^^^^
 
 In this example we will use `PuTTY SSH Client <https://www.putty.org/>`_ that is available for both Windows and Linux. You can use other serial programs and set communication parameters like below.
 
-Run terminal, set identified serial port, baud rate = 115200, data bits = 8, stop bits = 1, and parity = N. Below are example screen shots of setting the port and such transmission parameters (in short described as  115200-8-1-N) on Windows and Linux. Remember to select exactly the same serial port you have identified in steps above.
+Run terminal and set identified serial port. Baud rate = 115200 (if needed, change this to the default baud rate of the chip in use), data bits = 8, stop bits = 1, and parity = N. Below are example screenshots of setting the port and such transmission parameters (in short described as 115200-8-1-N) on Windows and Linux. Remember to select exactly the same serial port you have identified in steps above.
 
 .. figure:: ../../_static/putty-settings-windows.png
     :align: center
@@ -283,7 +295,7 @@ To spare you the trouble of installing a serial terminal program, macOS offers t
 
     /dev/cu.Bluetooth-Incoming-Port /dev/cu.SLAB_USBtoUART      /dev/cu.SLAB_USBtoUART7
 
-- The output will vary depending on the type and the number of boards connected to your PC. Then pick the device name of your board and run::
+- The output will vary depending on the type and the number of boards connected to your PC. Then pick the device name of your board and run (if needed, change "115200" to the default baud rate of the chip in use)::
 
     screen /dev/cu.device_name 115200
 
@@ -322,7 +334,7 @@ An example log is shown below. Reset the board if you do not see anything.
     I (45) boot: compile time 18:48:10
     ...
 
-If you can see readable log output, it means serial connection is working and you are ready to proceed with installation and finally upload of application to {IDF_TARGET_NAME}.
+If you can see readable log output, it means serial connection is working and you are ready to proceed with installation and finally upload an application to {IDF_TARGET_NAME}.
 
 .. note::
 

@@ -116,6 +116,8 @@ BOOLEAN L2CA_UpdateBleConnParams (BD_ADDR rem_bda, UINT16 min_int, UINT16 max_in
 {
     tL2C_LCB            *p_lcb;
     tACL_CONN           *p_acl_cb = btm_bda_to_acl(rem_bda, BT_TRANSPORT_LE);
+    UINT8               status = HCI_SUCCESS;
+    BOOLEAN             need_cb = false;
 
     /* See if we have a link control block for the remote device */
     p_lcb = l2cu_find_lcb_by_bd_addr (rem_bda, BT_TRANSPORT_LE);
@@ -135,19 +137,29 @@ BOOLEAN L2CA_UpdateBleConnParams (BD_ADDR rem_bda, UINT16 min_int, UINT16 max_in
         return (FALSE);
     }
 
+    /* Check whether the request conn params is already set */
+    if ((max_int == p_lcb->current_used_conn_interval) && (latency == p_lcb->current_used_conn_latency) &&
+        (timeout == p_lcb->current_used_conn_timeout)) {
+        status = HCI_SUCCESS;
+        need_cb = true;
+        L2CAP_TRACE_WARNING("%s connection parameter already set", __func__);
+    }
+
     if (p_lcb->conn_update_mask & L2C_BLE_UPDATE_PARAM_FULL){
-        UINT8 status = HCI_ERR_ILLEGAL_COMMAND;
+        status = HCI_ERR_ILLEGAL_COMMAND;
+        need_cb = true;
         L2CAP_TRACE_ERROR("There are two connection parameter requests that are being updated, please try later ");
-        if (conn_param_update_cb.update_conn_param_cb != NULL) {
-            tBTM_LE_UPDATE_CONN_PRAMS update_param;
-            update_param.max_conn_int = max_int;
-            update_param.min_conn_int = min_int;
-            update_param.conn_int = p_lcb->current_used_conn_interval;
-            update_param.slave_latency = p_lcb->current_used_conn_latency;
-            update_param.supervision_tout = p_lcb->current_used_conn_timeout;
-            (conn_param_update_cb.update_conn_param_cb)(status, p_lcb->remote_bd_addr, &update_param);
-        }
-        return (FALSE);
+    }
+
+    if ((need_cb == TRUE) && (conn_param_update_cb.update_conn_param_cb != NULL)) {
+        tBTM_LE_UPDATE_CONN_PRAMS update_param;
+        update_param.max_conn_int = max_int;
+        update_param.min_conn_int = min_int;
+        update_param.conn_int = p_lcb->current_used_conn_interval;
+        update_param.slave_latency = p_lcb->current_used_conn_latency;
+        update_param.supervision_tout = p_lcb->current_used_conn_timeout;
+        (conn_param_update_cb.update_conn_param_cb)(status, p_lcb->remote_bd_addr, &update_param);
+        return (status == HCI_SUCCESS);
     }
 
     p_lcb->waiting_update_conn_min_interval = min_int;
@@ -755,6 +767,69 @@ void l2cble_process_sig_cmd (tL2C_LCB *p_lcb, UINT8 *p, UINT16 pkt_len)
             p_lcb->conn_update_mask &= ~L2C_BLE_UPDATE_PARAM_FULL;
             l2c_send_update_conn_params_cb(p_lcb, status);
         }
+        break;
+    }
+    case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ: {
+        tL2C_CCB *p_ccb = NULL;
+        tL2C_RCB *p_rcb = NULL;
+        UINT16 spsm;
+        UINT16 scid;
+        UINT16 mtu;
+        UINT16 mps;
+        UINT16 credits;
+        STREAM_TO_UINT16(spsm, p);
+        STREAM_TO_UINT16(scid, p);
+        STREAM_TO_UINT16(mtu, p);
+        STREAM_TO_UINT16(mps, p);
+        STREAM_TO_UINT16(credits, p);
+        L2CAP_TRACE_DEBUG("%s spsm %x, scid %x", __func__, spsm, scid);
+
+        p_ccb = l2cu_find_ccb_by_remote_cid(p_lcb, scid);
+        if (p_ccb) {
+            l2cu_reject_ble_connection(p_lcb, id, L2CAP_LE_RESULT_SOURCE_CID_ALREADY_ALLOCATED);
+            break;
+        }
+
+        #if 0
+        p_rcb = l2cu_find_ble_rcb_by_psm(spsm);
+        if (p_rcb == NULL) {
+            break;
+        }
+        #endif
+
+        p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+        if (p_ccb == NULL) {
+            l2cu_reject_ble_connection(p_lcb, id, L2CAP_LE_RESULT_NO_RESOURCES);
+            break;
+        }
+
+        p_ccb->remote_id = id;
+        p_ccb->p_rcb = p_rcb;
+        p_ccb->remote_cid = scid;
+        p_ccb->local_conn_cfg.mtu = mtu;
+        p_ccb->local_conn_cfg.mps = controller_get_interface()->get_acl_data_size_ble();
+        p_ccb->local_conn_cfg.credits = credits;
+        p_ccb->peer_conn_cfg.mtu = mtu;
+        p_ccb->peer_conn_cfg.mps = mps;
+        p_ccb->peer_conn_cfg.credits = credits;
+
+        l2cu_send_peer_ble_credit_based_conn_res(p_ccb, L2CAP_LE_RESULT_CONN_OK);
+        break;
+    }
+    case L2CAP_CMD_DISC_REQ: {
+        tL2C_CCB *p_ccb = NULL;
+        UINT16 lcid;
+        UINT16 rcid;
+        STREAM_TO_UINT16(lcid, p);
+        STREAM_TO_UINT16(rcid, p);
+
+        p_ccb = l2cu_find_ccb_by_cid(p_lcb, lcid);
+        if (p_ccb) {
+            p_ccb->remote_id = id;
+            // TODO
+        }
+
+        l2cu_send_peer_disc_rsp(p_lcb, id, lcid, rcid);
         break;
     }
     default:

@@ -1,10 +1,12 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
+import inspect
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from typing import List
 
@@ -33,8 +35,13 @@ class TestPythonInstall(unittest.TestCase):
 
     def run_idf_tools(self, extra_args):  # type: (List[str]) -> str
         args = [sys.executable, '../idf_tools.py'] + extra_args
-        ret = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
-        return ret.stdout.decode('utf-8', 'ignore')
+        ret = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+        decoded_output = ret.stdout.decode('utf-8', 'ignore')
+        with open(os.path.join(IDF_PATH, 'tools', 'test_idf_tools', 'test_python_env_logs.txt'), 'a+') as w:
+            # stack() returns list of callers frame records. [1] represent caller of this function
+            w.write('============================= ' + inspect.stack()[1].function + ' =============================\n')
+            w.write(decoded_output)
+        return decoded_output
 
     def test_default_arguments(self):  # type: () -> None
         output = self.run_idf_tools(['check-python-dependencies'])
@@ -72,6 +79,26 @@ class TestPythonInstall(unittest.TestCase):
         output = self.run_idf_tools(['install-python-env', '--no-constraints'])
         self.assertNotIn(CONSTR, output)
         self.assertIn(REQ_CORE, output)
+
+
+class TestCustomPythonPathInstall(TestPythonInstall):
+
+    def setUp(self):  # type: () -> None
+        self.CUSTOM_PYTHON_DIR = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.CUSTOM_PYTHON_DIR)
+        os.environ['IDF_PYTHON_ENV_PATH'] = self.CUSTOM_PYTHON_DIR
+
+    def test_default_arguments(self):  # type: () -> None
+        output = self.run_idf_tools(['check-python-dependencies'])
+        self.assertIn(f"{self.CUSTOM_PYTHON_DIR}/bin/python doesn't exist", output)
+        self.assertNotIn(PYTHON_DIR, output)
+
+        output = self.run_idf_tools(['install-python-env'])
+        self.assertIn(self.CUSTOM_PYTHON_DIR, output)
+        self.assertNotIn(PYTHON_DIR, output)
+
+        output = self.run_idf_tools(['check-python-dependencies'])
+        self.assertIn(self.CUSTOM_PYTHON_DIR, output)
 
 
 if __name__ == '__main__':

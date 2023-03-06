@@ -3,16 +3,39 @@
 
 import json
 import os
+import signal
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import click
-from idf_monitor_base.output_helpers import yellow_print
-from idf_py_actions.errors import FatalError, NoSerialPortFoundError
 from idf_py_actions.global_options import global_options
-from idf_py_actions.tools import PropertyDict, RunTool, ensure_build_directory, get_sdkconfig_value, run_target
+from idf_py_actions.tools import (PropertyDict, RunTool, ensure_build_directory, get_default_serial_port,
+                                  get_sdkconfig_value, run_target)
 
 PYTHON = sys.executable
+
+
+BAUD_RATE = {
+    'names': ['-b', '--baud'],
+    'help': 'Baud rate for flashing. It can imply monitor baud rate as well if it hasn\'t been defined locally.',
+    'scope': 'global',
+    'envvar': 'ESPBAUD',
+    'default': 460800,
+}
+
+PORT = {
+    'names': ['-p', '--port'],
+    'help': 'Serial port.',
+    'scope': 'global',
+    'envvar': 'ESPPORT',
+    'default': None,
+}
+
+
+def yellow_print(message, newline='\n'):  # type: (str, Optional[str]) -> None
+    """Print a message to stderr with yellow highlighting """
+    sys.stderr.write('%s%s%s%s' % ('\033[0;33m', message, '\033[0m', newline))
+    sys.stderr.flush()
 
 
 def action_extensions(base_actions: Dict, project_path: str) -> Dict:
@@ -24,33 +47,11 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
             project_desc = json.load(f)
         return project_desc
 
-    def _get_default_serial_port(args: PropertyDict) -> Any:
-        # Import is done here in order to move it after the check_environment() ensured that pyserial has been installed
-        try:
-            import esptool
-            import serial.tools.list_ports
-            ports = list(sorted(p.device for p in serial.tools.list_ports.comports()))
-            # high baud rate could cause the failure of creation of the connection
-            esp = esptool.get_default_connected_device(serial_list=ports, port=None, connect_attempts=4,
-                                                       initial_baud=115200)
-            if esp is None:
-                raise NoSerialPortFoundError(
-                    "No serial ports found. Connect a device, or use '-p PORT' option to set a specific port.")
-
-            serial_port = esp.serial_port
-            esp._port.close()
-
-            return serial_port
-        except NoSerialPortFoundError:
-            raise
-        except Exception as e:
-            raise FatalError('An exception occurred during detection of the serial port: {}'.format(e))
-
     def _get_esptool_args(args: PropertyDict) -> List:
         esptool_path = os.path.join(os.environ['IDF_PATH'], 'components/esptool_py/esptool/esptool.py')
         esptool_wrapper_path = os.environ.get('ESPTOOL_WRAPPER', '')
         if args.port is None:
-            args.port = _get_default_serial_port(args)
+            args.port = get_default_serial_port()
         result = [PYTHON]
         if os.path.exists(esptool_wrapper_path):
             result += [esptool_wrapper_path]
@@ -85,7 +86,7 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
     def monitor(action: str, ctx: click.core.Context, args: PropertyDict, print_filter: str, monitor_baud: str, encrypted: bool,
                 no_reset: bool, timestamps: bool, timestamp_format: str, force_color: bool) -> None:
         """
-        Run idf_monitor.py to watch build output
+        Run esp_idf_monitor to watch build output
         """
         project_desc = _get_project_desc(ctx, args)
         elf_file = os.path.join(args.build_dir, project_desc['app_elf'])
@@ -100,8 +101,8 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
                 yellow_print(msg)
                 no_reset = False
 
-            esp_port = args.port or _get_default_serial_port(args)
-            monitor_args += ['-p', esp_port]
+            args.port = args.port or get_default_serial_port()
+            monitor_args += ['-p', args.port]
 
             baud = monitor_baud or os.getenv('IDF_MONITOR_BAUD') or os.getenv('MONITORBAUD')
 
@@ -154,9 +155,16 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
 
         idf_py = [PYTHON] + _get_commandline_options(ctx)  # commands to re-run idf.py
         monitor_args += ['-m', ' '.join("'%s'" % a for a in idf_py)]
-        hints = not args.no_hints
+        hints = False  # Temporarily disabled because of https://github.com/espressif/esp-idf/issues/9610
 
-        RunTool('idf_monitor', monitor_args, args.project_dir, build_dir=args.build_dir, hints=hints, interactive=True)()
+        # Temporally ignore SIGINT, which is used in idf_monitor to spawn gdb.
+        old_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        try:
+            RunTool('idf_monitor', monitor_args, args.project_dir, build_dir=args.build_dir, hints=hints, interactive=True)()
+        finally:
+            signal.signal(signal.SIGINT, old_handler)
 
     def flash(action: str, ctx: click.core.Context, args: PropertyDict) -> None:
         """
@@ -168,14 +176,14 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
             yellow_print('skipping flash since running on linux...')
             return
 
-        esp_port = args.port or _get_default_serial_port(args)
-        run_target(action, args, {'ESPBAUD': str(args.baud), 'ESPPORT': esp_port})
+        args.port = args.port or get_default_serial_port()
+        run_target(action, args, {'ESPBAUD': str(args.baud), 'ESPPORT': args.port})
 
     def erase_flash(action: str, ctx: click.core.Context, args: PropertyDict) -> None:
         ensure_build_directory(args, ctx.info_name)
         esptool_args = _get_esptool_args(args)
         esptool_args += ['erase_flash']
-        RunTool('esptool.py', esptool_args, args.build_dir)()
+        RunTool('esptool.py', esptool_args, args.build_dir, hints=not args.no_hints)()
 
     def global_callback(ctx: click.core.Context, global_args: Dict, tasks: PropertyDict) -> None:
         encryption = any([task.name in ('encrypted-flash', 'encrypted-app-flash') for task in tasks])
@@ -192,27 +200,11 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
         Calls ensure_build_directory() which will run cmake to generate a build
         directory (with the specified generator) as needed.
         """
-        args.port = args.port or _get_default_serial_port(args)
+        args.port = args.port or get_default_serial_port()
         ensure_build_directory(args, ctx.info_name)
         run_target(target_name, args, {'ESPBAUD': str(args.baud), 'ESPPORT': args.port})
 
-    baud_rate = {
-        'names': ['-b', '--baud'],
-        'help': 'Baud rate for flashing. It can imply monitor baud rate as well if it hasn\'t been defined locally.',
-        'scope': 'global',
-        'envvar': 'ESPBAUD',
-        'default': 460800,
-    }
-
-    port = {
-        'names': ['-p', '--port'],
-        'help': 'Serial port.',
-        'scope': 'global',
-        'envvar': 'ESPPORT',
-        'default': None,
-    }
-
-    BAUD_AND_PORT = [baud_rate, port]
+    BAUD_AND_PORT = [BAUD_RATE, PORT]
     serial_actions = {
         'global_action_callbacks': [global_callback],
         'actions': {
@@ -244,7 +236,7 @@ def action_extensions(base_actions: Dict, project_path: str) -> Dict:
                 'help':
                 'Display serial output.',
                 'options': [
-                    port, {
+                    PORT, {
                         'names': ['--print-filter', '--print_filter'],
                         'help':
                         ('Filter monitor output. '

@@ -16,9 +16,8 @@ In Deep-sleep mode, the CPUs, most of the RAM, and all digital peripherals that 
     .. list::
 
         - RTC controller
-        - RTC peripherals
         :SOC_ULP_SUPPORTED: - ULP coprocessor
-        - RTC fast memory
+        :SOC_RTC_FAST_MEM_SUPPORTED: - RTC fast memory
         :SOC_RTC_SLOW_MEM_SUPPORTED: - RTC slow memory
 
 There are several wakeup sources in Deep-sleep and Light-sleep modes. These sources can also be combined so that the chip will wake up when any of the sources are triggered. Wakeup sources can be enabled using ``esp_sleep_enable_X_wakeup`` APIs and can be disabled using :cpp:func:`esp_sleep_disable_wakeup_source` API. Next section describes these APIs in detail. Wakeup sources can be configured at any moment before entering Light-sleep or Deep-sleep mode.
@@ -72,7 +71,7 @@ RTC peripherals or RTC memories don't need to be powered on during sleep in this
 
     :cpp:func:`esp_sleep_enable_touchpad_wakeup` function can be used to enable this wakeup source.
 
-.. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+.. only:: SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP
 
     External Wakeup (ext0)
     ^^^^^^^^^^^^^^^^^^^^^^
@@ -100,10 +99,13 @@ RTC peripherals or RTC memories don't need to be powered on during sleep in this
     This wakeup source is implemented by the RTC controller. As such, RTC peripherals and RTC memories can be powered down in this mode. However, if RTC peripherals are powered down, internal pullup and pulldown resistors will be disabled. To use internal pullup or pulldown resistors, request the RTC peripherals power domain to be kept on during sleep, and configure pullup/pulldown resistors using ``rtc_gpio_`` functions before entering sleep::
 
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-        gpio_pullup_dis(gpio_num);
-        gpio_pulldown_en(gpio_num);
+        rtc_gpio_pullup_dis(gpio_num);
+        rtc_gpio_pulldown_en(gpio_num);
 
-    .. warning:: After waking up from sleep, IO pad(s) used for wakeup will be configured as RTC IO. Before using these pads as digital GPIOs, reconfigure them using :cpp:func:`rtc_gpio_deinit` function.
+    .. warning::
+        - To use the EXT1 wakeup, the IO pad(s) are configured as RTC IO. Therefore, before using these pads as digital GPIOs, users need to reconfigure them by calling the :cpp:func:`rtc_gpio_deinit` function.
+
+        - If the RTC peripherals are configured to be powered down (which is by default), the wakeup IOs will be set to the holding state before entering sleep. Therefore, after the chip wakes up from Light-sleep, please call `rtc_gpio_hold_dis` to disable the hold function to perform any pin re-configuration. For Deep-sleep wakeup, this is already being handled at the application startup stage.
 
     :cpp:func:`esp_sleep_enable_ext1_wakeup` function can be used to enable this wakeup source.
 
@@ -125,11 +127,11 @@ RTC peripherals or RTC memories don't need to be powered on during sleep in this
     GPIO Wakeup (Light-sleep Only)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    .. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+    .. only:: (SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP)
 
         In addition to EXT0 and EXT1 wakeup sources described above, one more method of wakeup from external inputs is available in Light-sleep mode. With this wakeup source, each pin can be individually configured to trigger wakeup on high or low level using :cpp:func:`gpio_wakeup_enable` function. Unlike EXT0 and EXT1 wakeup sources, which can only be used with RTC IOs, this wakeup source can be used with any IO (RTC or digital).
 
-    .. only:: not SOC_PM_SUPPORT_EXT_WAKEUP
+    .. only:: not (SOC_PM_SUPPORT_EXT0_WAKEUP or SOC_PM_SUPPORT_EXT1_WAKEUP)
 
         One more method of wakeup from external inputs is available in Light-sleep mode. With this wakeup source, each pin can be individually configured to trigger wakeup on high or low level using :cpp:func:`gpio_wakeup_enable` function. This wakeup source can be used with any IO (RTC or digital).
 
@@ -142,6 +144,14 @@ RTC peripherals or RTC memories don't need to be powered on during sleep in this
 
             esp_sleep_pd_config(ESP_PD_DOMAIN_VDDSDIO, ESP_PD_OPTION_ON);
 
+.. only:: not SOC_RTCIO_WAKE_SUPPORTED
+
+    GPIO Wakeup
+    ^^^^^^^^^^^
+
+    Any IO can be used as the external input to wake up the chip from Light-sleep. Each pin can be individually configured to trigger wakeup on high or low level using the :cpp:func:`gpio_wakeup_enable` function. Then the :cpp:func:`esp_sleep_enable_gpio_wakeup` function should be called to enable this wakeup source.
+
+    Additionally, IOs that are powered by the VDD3P3_RTC power domain can be used to wake up the chip from Deep-sleep. The wakeup pin and wakeup trigger level can be configured by calling :cpp:func:`esp_deep_sleep_enable_gpio_wakeup`. The function will enable the Deep-sleep wakeup for the selected pin.
 
 UART Wakeup (Light-sleep Only)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -164,7 +174,7 @@ By default, :cpp:func:`esp_deep_sleep_start` and :cpp:func:`esp_light_sleep_star
 
     If some variables in the program are placed into RTC slow memory (for example, using ``RTC_DATA_ATTR`` attribute), RTC slow memory will be kept powered on by default. This can be overridden using :cpp:func:`esp_sleep_pd_config` function, if desired.
 
-.. only:: not SOC_RTC_SLOW_MEM_SUPPORTED
+.. only:: not SOC_RTC_SLOW_MEM_SUPPORTED and SOC_RTC_FAST_MEM_SUPPORTED
 
     In {IDF_TARGET_NAME}, there is only RTC fast memory, so if some variables in the program are marked by ``RTC_DATA_ATTR``, ``RTC_SLOW_ATTR`` or ``RTC_FAST_ATTR`` attributes, all of them go to RTC fast memory. It will be kept powered on by default. This can be overridden using :cpp:func:`esp_sleep_pd_config` function, if desired.
 
@@ -213,7 +223,7 @@ Configuring IOs
 
 Some {IDF_TARGET_NAME} IOs have internal pullups or pulldowns, which are enabled by default. If an external circuit drives this pin in Deep-sleep mode, current consumption may increase due to current flowing through these pullups and pulldowns.
 
-.. only:: not esp32c3
+.. only:: SOC_RTCIO_HOLD_SUPPORTED
 
     To isolate a pin to prevent extra current draw, call :cpp:func:`rtc_gpio_isolate` function.
 
@@ -223,7 +233,7 @@ Some {IDF_TARGET_NAME} IOs have internal pullups or pulldowns, which are enabled
 
 	rtc_gpio_isolate(GPIO_NUM_12);
 
-.. only:: esp32c3
+.. only:: esp32c2 or esp32c3
 
     In Deep-sleep mode:
         - digital GPIOs (GPIO6 ~ 21) are in a high impedance state.
@@ -247,7 +257,7 @@ Checking Sleep Wakeup Cause
 
     For touchpad, it is possible to identify which touch pin has caused wakeup using :cpp:func:`esp_sleep_get_touchpad_wakeup_status` functions.
 
-.. only:: SOC_PM_SUPPORT_EXT_WAKEUP
+.. only:: SOC_PM_SUPPORT_EXT1_WAKEUP
 
     For ext1 wakeup sources, it is possible to identify which touch pin has caused wakeup using :cpp:func:`esp_sleep_get_ext1_wakeup_status` functions.
 
@@ -267,7 +277,7 @@ Application Example
 
     - :example:`system/deep_sleep`: the usage of various Deep-sleep wakeup triggers and ULP coprocessor programming.
 
-.. only:: esp32c3
+.. only:: esp32c3 or esp32c2
 
     - :example:`system/deep_sleep`: the usage of Deep-sleep wakeup triggered by timer.
 

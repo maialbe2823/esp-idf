@@ -159,8 +159,6 @@ TEST_CASE("lcd_rgb_panel_refresh_on_demand", "[lcd]")
     free(img);
 }
 
-#if !CONFIG_LCD_RGB_ISR_IRAM_SAFE
-// bounce buffer mode is not IRAM safe, so we don't test it
 TEST_CASE("lcd_rgb_panel_bounce_buffer", "[lcd]")
 {
     uint8_t *img = malloc(TEST_IMG_SIZE);
@@ -184,7 +182,6 @@ TEST_CASE("lcd_rgb_panel_bounce_buffer", "[lcd]")
     TEST_ESP_OK(esp_lcd_panel_del(panel_handle));
     free(img);
 }
-#endif
 
 TEST_CASE("lcd_rgb_panel_update_pclk", "[lcd]")
 {
@@ -208,6 +205,31 @@ TEST_CASE("lcd_rgb_panel_update_pclk", "[lcd]")
         esp_lcd_rgb_panel_set_pclk(panel_handle, test_pclk_freq[i]);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+
+    printf("delete RGB panel\r\n");
+    TEST_ESP_OK(esp_lcd_panel_del(panel_handle));
+    free(img);
+}
+
+TEST_CASE("lcd_rgb_panel_restart", "[lcd]")
+{
+    uint8_t *img = malloc(TEST_IMG_SIZE);
+    TEST_ASSERT_NOT_NULL(img);
+
+    printf("initialize RGB panel with stream mode\r\n");
+    esp_lcd_panel_handle_t panel_handle = test_rgb_panel_initialization(16, 16, 0, false, NULL, NULL);
+    printf("flush one clock block to the LCD\r\n");
+    uint8_t color_byte = esp_random() & 0xFF;
+    int x_start = esp_random() % (TEST_LCD_H_RES - 100);
+    int y_start = esp_random() % (TEST_LCD_V_RES - 100);
+    memset(img, color_byte, TEST_IMG_SIZE);
+    esp_lcd_panel_draw_bitmap(panel_handle, x_start, y_start, x_start + 100, y_start + 100, img);
+    printf("The LCD driver should keep flushing the color block in the background (as it's in stream mode)\r\n");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    printf("Restart the DMA transmission in the background\r\n");
+    TEST_ESP_OK(esp_lcd_rgb_panel_restart(panel_handle));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
     printf("delete RGB panel\r\n");
     TEST_ESP_OK(esp_lcd_panel_del(panel_handle));

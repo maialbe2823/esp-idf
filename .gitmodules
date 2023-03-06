@@ -47,14 +47,6 @@
 	path = components/esp_wifi/lib
 	url = ../../espressif/esp32-wifi-lib.git
 
-[submodule "components/tinyusb/tinyusb"]
-	path = components/tinyusb/tinyusb
-	url = ../../espressif/tinyusb.git
-
-[submodule "examples/peripherals/secure_element/atecc608_ecdsa/components/esp-cryptoauthlib"]
-	path = examples/peripherals/secure_element/atecc608_ecdsa/components/esp-cryptoauthlib
-	url = ../../espressif/esp-cryptoauthlib.git
-
 [submodule "components/cmock/CMock"]
 	path = components/cmock/CMock
 	url = ../../ThrowTheSwitch/CMock.git
@@ -87,6 +79,14 @@
 	path = components/bt/controller/lib_esp32c2/esp32c2-bt-lib
 	url = ../../espressif/esp32c2-bt-lib.git
 
+[submodule "components/bt/controller/lib_esp32c6/esp32c6-bt-lib"]
+	path = components/bt/controller/lib_esp32c6/esp32c6-bt-lib
+	url = ../../espressif/esp32c6-bt-lib.git
+
 [submodule "components/heap/tlsf"]
 	path = components/heap/tlsf
 	url = ../../espressif/tlsf.git
+
+[submodule "components/esp_coex/lib"]
+	path = components/esp_coex/lib
+	url = ../../espressif/esp-coex-lib.git

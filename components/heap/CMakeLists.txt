@@ -1,3 +1,12 @@
+idf_build_get_property(target IDF_TARGET)
+
+# On Linux, we only support a few features, hence this simple component registration
+if(${target} STREQUAL "linux")
+    idf_component_register(SRCS "heap_caps_linux.c"
+                           INCLUDE_DIRS "include")
+    return()
+endif()
+
 set(srcs
     "heap_caps.c"
     "heap_caps_init.c"
@@ -8,11 +17,6 @@ set(includes "include")
 if(NOT CONFIG_HEAP_TLSF_USE_ROM_IMPL)
     set(priv_includes "tlsf")
     list(APPEND srcs "tlsf/tlsf.c")
-    if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-        set_source_files_properties(tlsf/tlsf.c
-                                    PROPERTIES COMPILE_FLAGS
-                                    "-include ../tlsf_platform.h")
-    endif()
 endif()
 
 if(NOT CONFIG_HEAP_POISONING_DISABLED)

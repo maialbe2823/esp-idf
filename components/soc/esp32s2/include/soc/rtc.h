@@ -97,6 +97,7 @@ extern "C" {
 #define RTC_CNTL_XTL_BUF_WAIT_SLP_US    (1000)
 #define RTC_CNTL_CK8M_WAIT_SLP_CYCLES   (4)
 #define RTC_CNTL_WAKEUP_DELAY_CYCLES    (4)
+#define RTC_CNTL_MIN_SLP_VAL_MIN        (2)
 
 #define RTC_CNTL_CK8M_DFREQ_DEFAULT 172
 #define RTC_CNTL_SCK_DCAP_DEFAULT   255
@@ -422,6 +423,9 @@ void rtc_clk_cpu_freq_get_config(rtc_cpu_freq_config_t* out_config);
  * Short form for filling in rtc_cpu_freq_config_t structure and calling
  * rtc_clk_cpu_freq_set_config when a switch to XTAL is needed.
  * Assumes that XTAL frequency has been determined — don't call in startup code.
+ *
+ * @note Unlike on other chips, on ESP32S2, this function does not disable BBPLL after switching the CPU clock source
+ * to XTAL. If BBPLL wants to be turned off for power saving purpose, please use rtc_clk_cpu_freq_set_config.
  */
 void rtc_clk_cpu_freq_set_xtal(void);
 
@@ -454,6 +458,11 @@ uint32_t rtc_clk_cal_internal(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles, ui
  * of cycles to be counted exceeds the expected time twice. This may happen if
  * 32k XTAL is being calibrated, but the oscillator has not started up (due to
  * incorrect loading capacitance, board design issue, or lack of 32 XTAL on board).
+ *
+ * @note When 32k CLK is being calibrated, this function will check the accuracy
+ * of the clock. Since the xtal 32k or ext osc 32k is generally very stable, if
+ * the check fails, then consider this an invalid 32k clock and return 0. This
+ * check can filter some jamming signal.
  *
  * @param cal_clk  clock to be measured
  * @param slow_clk_cycles  number of slow clock cycles to average
@@ -501,10 +510,6 @@ uint64_t rtc_time_slowclk_to_us(uint64_t rtc_cycles, uint32_t period);
  * @return current value of RTC counter
  */
 uint64_t rtc_time_get(void);
-
-uint64_t rtc_light_slp_time_get(void);
-
-uint64_t rtc_deep_slp_time_get(void);
 
 /**
  * @brief Busy loop until next RTC_SLOW_CLK cycle

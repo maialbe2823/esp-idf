@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: CC0-1.0
 
 import logging
@@ -8,11 +8,12 @@ import pytest
 from pytest_embedded import Dut
 
 
-# IDF-5053
 @pytest.mark.esp32
 @pytest.mark.esp32s2
 @pytest.mark.esp32s3
 @pytest.mark.esp32c3
+@pytest.mark.esp32c2
+@pytest.mark.esp32c6
 @pytest.mark.generic
 def test_light_sleep(dut: Dut) -> None:
 
@@ -39,7 +40,7 @@ def test_light_sleep(dut: Dut) -> None:
     match = dut.expect(EXIT_SLEEP_REGEX)
     logging.info('Got second sleep period, wakeup from {}, slept for {}'.format(match.group(1), match.group(3)))
     # sleep time error should be less than 1ms
-    assert(match.group(1).decode('utf8') == 'timer' and int(match.group(3)) >= WAKEUP_INTERVAL_MS - 1 and int(match.group(3)) <= WAKEUP_INTERVAL_MS + 1)
+    assert match.group(1).decode('utf8') == 'timer' and int(match.group(3)) >= WAKEUP_INTERVAL_MS - 1 and int(match.group(3)) <= WAKEUP_INTERVAL_MS + 1
 
     # this time we'll test gpio wakeup
     dut.expect_exact(ENTERING_SLEEP_STR)
@@ -48,7 +49,7 @@ def test_light_sleep(dut: Dut) -> None:
     time.sleep(1)
     match = dut.expect(EXIT_SLEEP_PIN_REGEX)
     logging.info('Got third sleep period, wakeup from {}, slept for {}'.format(match.group(1), match.group(3)))
-    assert(int(match.group(3)) < WAKEUP_INTERVAL_MS)
+    assert int(match.group(3)) < WAKEUP_INTERVAL_MS
 
     dut.expect(WAITING_FOR_GPIO_STR)
     logging.info('Is waiting for GPIO...')
@@ -62,9 +63,9 @@ def test_light_sleep(dut: Dut) -> None:
     time.sleep(1)
     match = dut.expect(EXIT_SLEEP_UART_REGEX)
     logging.info('Got third sleep period, wakeup from {}, slept for {}'.format(match.group(1), match.group(3)))
-    assert(int(match.group(3)) < WAKEUP_INTERVAL_MS)
+    assert int(match.group(3)) < WAKEUP_INTERVAL_MS
     logging.info('Went to sleep again')
 
     match = dut.expect(EXIT_SLEEP_REGEX)
-    assert(match.group(1).decode('utf8') == 'timer' and int(match.group(3)) >= WAKEUP_INTERVAL_MS - 1 and int(match.group(3)) <= WAKEUP_INTERVAL_MS + 1)
+    assert match.group(1).decode('utf8') == 'timer' and int(match.group(3)) >= WAKEUP_INTERVAL_MS - 1 and int(match.group(3)) <= WAKEUP_INTERVAL_MS + 1
     logging.info('Woke up from timer again')

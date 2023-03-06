@@ -113,11 +113,8 @@ esp_err_t esp_create_mbedtls_handle(const char *hostname, size_t hostlen, const 
 #endif
 
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    // NOTE: Mbed TLS currently supports only client-side config with TLS 1.3
-    if (tls->role != ESP_TLS_SERVER) {
-        mbedtls_ssl_conf_min_version(&tls->conf, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_4);
-        mbedtls_ssl_conf_max_version(&tls->conf, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_4);
-    }
+    mbedtls_ssl_conf_min_tls_version(&tls->conf, MBEDTLS_SSL_VERSION_TLS1_3);
+    mbedtls_ssl_conf_max_tls_version(&tls->conf, MBEDTLS_SSL_VERSION_TLS1_3);
 #endif
 
     if ((ret = mbedtls_ssl_setup(&tls->ssl, &tls->conf)) != 0) {
@@ -229,7 +226,7 @@ ssize_t esp_mbedtls_read(esp_tls_t *tls, char *data, size_t datalen)
         }
         if (ret != ESP_TLS_ERR_SSL_WANT_READ  && ret != ESP_TLS_ERR_SSL_WANT_WRITE) {
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
-            ESP_LOGE(TAG, "read error :-0x%04X:", -ret);
+            ESP_LOGE(TAG, "read error :-0x%04zX:", -ret);
             mbedtls_print_error_msg(ret);
         }
     }
@@ -245,19 +242,19 @@ ssize_t esp_mbedtls_write(esp_tls_t *tls, const char *data, size_t datalen)
             write_len = MBEDTLS_SSL_OUT_CONTENT_LEN;
         }
         if (datalen > MBEDTLS_SSL_OUT_CONTENT_LEN) {
-            ESP_LOGD(TAG, "Fragmenting data of excessive size :%d, offset: %d, size %d", datalen, written, write_len);
+            ESP_LOGD(TAG, "Fragmenting data of excessive size :%zu, offset: %zu, size %zu", datalen, written, write_len);
         }
         ssize_t ret = mbedtls_ssl_write(&tls->ssl, (unsigned char*) data + written, write_len);
         if (ret <= 0) {
             if (ret != ESP_TLS_ERR_SSL_WANT_READ  && ret != ESP_TLS_ERR_SSL_WANT_WRITE && ret != 0) {
                 ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
                 ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_ESP, ESP_ERR_MBEDTLS_SSL_WRITE_FAILED);
-                ESP_LOGE(TAG, "write error :-0x%04X:", -ret);
+                ESP_LOGE(TAG, "write error :-0x%04zX:", -ret);
                 mbedtls_print_error_msg(ret);
                 return ret;
             } else {
                 // Exiting the tls-write process as less than desired datalen are writable
-                ESP_LOGD(TAG, "mbedtls_ssl_write() returned -0x%04X, already written %d, exitting...", -ret, written);
+                ESP_LOGD(TAG, "mbedtls_ssl_write() returned -0x%04zX, already written %zu, exitting...", -ret, written);
                 mbedtls_print_error_msg(ret);
                 return (written > 0) ? written : ret;
             }
@@ -273,8 +270,11 @@ void esp_mbedtls_conn_delete(esp_tls_t *tls)
     if (tls != NULL) {
         esp_mbedtls_cleanup(tls);
         if (tls->is_tls) {
-            mbedtls_net_free(&tls->server_fd);
-            tls->sockfd = tls->server_fd.fd;
+            if (tls->server_fd.fd != -1) {
+                mbedtls_net_free(&tls->server_fd);
+                /* Socket is already closed by `mbedtls_net_free` and hence also change assignment of its copy to an invalid value */
+                tls->sockfd = -1;
+            }
         }
     }
 }
@@ -341,7 +341,7 @@ static esp_err_t set_ca_cert(esp_tls_t *tls, const unsigned char *cacert, size_t
     mbedtls_x509_crt_init(tls->cacert_ptr);
     int ret = mbedtls_x509_crt_parse(tls->cacert_ptr, cacert, cacert_len);
     if (ret < 0) {
-        ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+        ESP_LOGE(TAG, "mbedtls_x509_crt_parse of CA cert returned -0x%04X", -ret);
         mbedtls_print_error_msg(ret);
         ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
         return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
@@ -371,7 +371,7 @@ static esp_err_t set_pki_context(esp_tls_t *tls, const esp_tls_pki_t *pki)
 
         ret = mbedtls_x509_crt_parse(pki->public_cert, pki->publiccert_pem_buf, pki->publiccert_pem_bytes);
         if (ret < 0) {
-            ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+            ESP_LOGE(TAG, "mbedtls_x509_crt_parse of public cert returned -0x%04X", -ret);
             mbedtls_print_error_msg(ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
             return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
@@ -512,9 +512,18 @@ esp_err_t set_server_config(esp_tls_cfg_server_t *cfg, esp_tls_t *tls)
         return ESP_ERR_MBEDTLS_SSL_CONFIG_DEFAULTS_FAILED;
     }
 
+    mbedtls_ssl_conf_set_user_data_p(&tls->conf, cfg->userdata);
+
 #ifdef CONFIG_MBEDTLS_SSL_ALPN
     if (cfg->alpn_protos) {
         mbedtls_ssl_conf_alpn_protocols(&tls->conf, cfg->alpn_protos);
+    }
+#endif
+
+#if defined(CONFIG_ESP_TLS_SERVER_CERT_SELECT_HOOK)
+    if (cfg->cert_select_cb != NULL) {
+        ESP_LOGI(TAG, "Initializing server side cert selection cb");
+        mbedtls_ssl_conf_cert_cb(&tls->conf, cfg->cert_select_cb);
     }
 #endif
 
@@ -569,7 +578,17 @@ esp_err_t set_server_config(esp_tls_cfg_server_t *cfg, esp_tls_t *tls)
             return esp_ret;
         }
     } else {
+#if defined(CONFIG_ESP_TLS_SERVER_CERT_SELECT_HOOK)
+        if (cfg->cert_select_cb == NULL) {
+            ESP_LOGE(TAG, "No cert select cb is defined");
+        } else {
+            /* At this point Callback MUST ALWAYS call mbedtls_ssl_set_hs_own_cert, or the handshake will abort! */
+            ESP_LOGD(TAG, "Missing server cert and/or key, but cert selection cb is defined.");
+            return ESP_OK;
+        }
+#else
         ESP_LOGE(TAG, "Missing server certificate and/or key");
+#endif
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -790,6 +809,7 @@ int esp_mbedtls_server_session_create(esp_tls_cfg_server_t *cfg, int sockfd, esp
         tls->conn_state = ESP_TLS_FAIL;
         return -1;
     }
+
     tls->read = esp_mbedtls_read;
     tls->write = esp_mbedtls_write;
     int ret;
@@ -848,7 +868,7 @@ esp_err_t esp_mbedtls_set_global_ca_store(const unsigned char *cacert_pem_buf, c
     }
     ret = mbedtls_x509_crt_parse(global_cacert, cacert_pem_buf, cacert_pem_bytes);
     if (ret < 0) {
-        ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+        ESP_LOGE(TAG, "mbedtls_x509_crt_parse of global CA cert returned -0x%04X", -ret);
         mbedtls_print_error_msg(ret);
         mbedtls_x509_crt_free(global_cacert);
         free(global_cacert);
@@ -930,7 +950,7 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, const void *pki)
     if(cfg->clientcert_buf != NULL) {
         ret = mbedtls_x509_crt_parse(&tls->clientcert, (const unsigned char*)((esp_tls_pki_t *)pki->publiccert_pem_buf), (esp_tls_pki_t *)pki->publiccert_pem_bytes);
         if (ret < 0) {
-            ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%04X", -ret);
+            ESP_LOGE(TAG, "mbedtls_x509_crt_parse of client cert returned -0x%04X", -ret);
             mbedtls_print_error_msg(ret);
             ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
             return ESP_ERR_MBEDTLS_X509_CRT_PARSE_FAILED;
@@ -971,14 +991,17 @@ static esp_err_t esp_mbedtls_init_pk_ctx_for_ds(const void *pki)
                                         esp_ds_get_keylen )) != 0) {
         ESP_LOGE(TAG, "Error in mbedtls_pk_setup_rsa_alt, returned -0x%04X", -ret);
         mbedtls_print_error_msg(ret);
-        return ESP_FAIL;
+        ret = ESP_FAIL;
+        goto exit;
     }
     ret = esp_ds_init_data_ctx(((const esp_tls_pki_t*)pki)->esp_ds_data);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize DS parameters from nvs");
-        return ESP_FAIL;
+        goto exit;
     }
     ESP_LOGD(TAG, "DS peripheral params initialized.");
-    return ESP_OK;
+exit:
+    mbedtls_rsa_free(&rsakey);
+    return ret;
 }
 #endif /* CONFIG_ESP_TLS_USE_DS_PERIPHERAL */

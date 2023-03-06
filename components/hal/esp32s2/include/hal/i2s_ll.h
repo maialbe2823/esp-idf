@@ -28,8 +28,6 @@ extern "C" {
 // Get I2S hardware instance with giving i2s num
 #define I2S_LL_GET_HW(num)             (((num) == 0) ? (&I2S0) : NULL)
 
-#define I2S_LL_BASE_CLK                (2 * APB_CLK_FREQ)
-
 #define I2S_LL_BCK_MAX_PRESCALE  (64)
 
 #define I2S_LL_MCLK_DIVIDER_BIT_WIDTH  (6)
@@ -43,6 +41,9 @@ extern "C" {
 
 #define I2S_LL_TX_EVENT_MASK        I2S_LL_EVENT_TX_EOF
 #define I2S_LL_RX_EVENT_MASK        I2S_LL_EVENT_RX_EOF
+
+#define I2S_LL_PLL_F160M_CLK_FREQ   (160 * 1000000) // PLL_F160M_CLK: 160MHz
+#define I2S_LL_DEFAULT_PLL_CLK_FREQ     I2S_LL_PLL_F160M_CLK_FREQ    // The default PLL clock frequency while using I2S_CLK_SRC_DEFAULT
 
 /* I2S clock configuration structure */
 typedef struct {
@@ -280,7 +281,7 @@ static inline void i2s_ll_tx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
  * @note mclk on ESP32S2 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
+ * @param sclk system clock
  * @param mclk module clock
  * @param mclk_div integer part of the division from sclk to mclk
  */
@@ -356,7 +357,7 @@ static inline void i2s_ll_rx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
  * @note mclk on ESP32S2 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
+ * @param sclk system clock
  * @param mclk module clock
  * @param mclk_div integer part of the division from sclk to mclk
  */
@@ -709,22 +710,22 @@ static inline void i2s_ll_enable_dma(i2s_dev_t *hw, bool ena)
 }
 
 /**
- * @brief Set I2S TX to philip standard
+ * @brief Set I2S TX to philips standard
  *
  * @param hw Peripheral I2S hardware instance address.
  */
-static inline void i2s_ll_tx_set_format_philip(i2s_dev_t *hw)
+static inline void i2s_ll_tx_set_format_philips(i2s_dev_t *hw)
 {
     hw->conf.tx_short_sync = 0;
     hw->conf.tx_msb_shift = 1;
 }
 
 /**
- * @brief Set I2S RX to philip standard
+ * @brief Set I2S RX to philips standard
  *
  * @param hw Peripheral I2S hardware instance address.
  */
-static inline void i2s_ll_rx_set_format_philip(i2s_dev_t *hw)
+static inline void i2s_ll_rx_set_format_philips(i2s_dev_t *hw)
 {
     hw->conf.rx_short_sync = 0;
     hw->conf.rx_msb_shift = 1;

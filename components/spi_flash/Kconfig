@@ -1,4 +1,5 @@
 menu "SPI Flash driver"
+    depends on !APP_BUILD_TYPE_PURE_RAM_APP
 
     config SPI_FLASH_VERIFY_WRITE
         bool "Verify SPI flash writes"
@@ -53,14 +54,9 @@ menu "SPI Flash driver"
             to flash on ESP32-D2WD; (2) main SPI flash is connected to non-default pins; (3) main
             SPI flash chip is manufactured by ISSI.
 
-    config SPI_FLASH_HAS_ROM_IMPL
-        bool
-        depends on IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32C2
-        default y if IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32C2
-
     config SPI_FLASH_ROM_IMPL
         bool "Use esp_flash implementation in ROM"
-        depends on SPI_FLASH_HAS_ROM_IMPL
+        depends on ESP_ROM_HAS_SPI_FLASH
         default n
         help
             Enable this flag to use new SPI flash driver functions from ROM instead of ESP-IDF.
@@ -223,9 +219,12 @@ menu "SPI Flash driver"
     menu "Auto-detect flash chips"
         visible if !SPI_FLASH_OVERRIDE_CHIP_DRIVER_LIST
 
+        orsource "./$IDF_TARGET/Kconfig.soc_caps.in"
+
         config SPI_FLASH_SUPPORT_ISSI_CHIP
             bool "ISSI"
-            default y
+            default y if SPI_FLASH_VENDOR_ISSI_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of ISSI chips if chip vendor not directly
                 given by ``chip_drv`` member of the chip struct. This adds support for variant
@@ -233,7 +232,8 @@ menu "SPI Flash driver"
 
         config SPI_FLASH_SUPPORT_MXIC_CHIP
             bool "MXIC"
-            default y
+            default y if SPI_FLASH_VENDOR_MXIC_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of MXIC chips if chip vendor not directly
                 given by ``chip_drv`` member of the chip struct. This adds support for variant
@@ -241,7 +241,8 @@ menu "SPI Flash driver"
 
         config SPI_FLASH_SUPPORT_GD_CHIP
             bool "GigaDevice"
-            default y
+            default y if SPI_FLASH_VENDOR_GD_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of GD (GigaDevice) chips if chip vendor not
                 directly given by ``chip_drv`` member of the chip struct. If you are using Wrover
@@ -254,7 +255,8 @@ menu "SPI Flash driver"
 
         config SPI_FLASH_SUPPORT_WINBOND_CHIP
             bool "Winbond"
-            default y
+            default y if SPI_FLASH_VENDOR_WINBOND_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of Winbond chips if chip vendor not directly
                 given by ``chip_drv`` member of the chip struct. This adds support for variant
@@ -263,8 +265,8 @@ menu "SPI Flash driver"
         config SPI_FLASH_SUPPORT_BOYA_CHIP
             bool "BOYA"
             # ESP32 doens't usually use this chip, default n to save iram.
-            default n if IDF_TARGET_ESP32
-            default y
+            default y if SPI_FLASH_VENDOR_BOYA_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of BOYA chips if chip vendor not directly
                 given by ``chip_drv`` member of the chip struct. This adds support for variant
@@ -273,8 +275,8 @@ menu "SPI Flash driver"
         config SPI_FLASH_SUPPORT_TH_CHIP
             bool "TH"
             # ESP32 doens't usually use this chip, default n to save iram.
-            default n if IDF_TARGET_ESP32
-            default y
+            default y if SPI_FLASH_VENDOR_TH_SUPPORTED
+            default n
             help
                 Enable this to support auto detection of TH chips if chip vendor not directly
                 given by ``chip_drv`` member of the chip struct. This adds support for variant

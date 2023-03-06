@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,7 +24,6 @@ static inline void dedic_gpio_cpu_ll_enable_output(uint32_t mask)
     RV_WRITE_CSR(CSR_GPIO_OEN_USER, mask);
 }
 
-__attribute__((always_inline))
 static inline void dedic_gpio_cpu_ll_write_all(uint32_t value)
 {
     RV_WRITE_CSR(CSR_GPIO_OUT_USER, value);

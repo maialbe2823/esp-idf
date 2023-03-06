@@ -16,12 +16,30 @@ void systimer_hal_init(systimer_hal_context_t *hal)
 {
     hal->dev = &SYSTIMER;
     systimer_ll_enable_clock(hal->dev, true);
+#if SOC_SYSTIMER_SUPPORT_ETM
+    systimer_ll_enable_etm(&SYSTIMER, true);
+#endif
 }
 
 void systimer_hal_deinit(systimer_hal_context_t *hal)
 {
+#if SOC_SYSTIMER_SUPPORT_ETM
+    systimer_ll_enable_etm(&SYSTIMER, false);
+#endif
     systimer_ll_enable_clock(hal->dev, false);
     hal->dev = NULL;
+}
+
+void systimer_hal_set_clock_source(systimer_hal_context_t *hal, systimer_clock_source_t clk_src)
+{
+    (void)hal;
+    systimer_ll_set_clock_source(clk_src);
+}
+
+systimer_clock_source_t systimer_hal_get_clock_source(systimer_hal_context_t *hal)
+{
+    (void)hal;
+    return systimer_ll_get_clock_source();
 }
 
 void systimer_hal_set_tick_rate_ops(systimer_hal_context_t *hal, systimer_hal_tick_rate_ops_t *ops)

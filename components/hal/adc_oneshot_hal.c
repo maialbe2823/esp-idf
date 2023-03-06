@@ -9,9 +9,9 @@
 #include "soc/soc_caps.h"
 #include "hal/adc_oneshot_hal.h"
 #include "hal/adc_hal_common.h"
-#include "hal/adc_hal_conf.h"
 #include "hal/adc_ll.h"
 #include "hal/assert.h"
+#include "hal/log.h"
 
 #if SOC_DAC_SUPPORTED
 #include "hal/dac_ll.h"
@@ -25,7 +25,7 @@
 #endif
 
 
-#if SOC_DAC_SUPPORTED
+#if CONFIG_ADC_DISABLE_DAC_OUTPUT
 // To disable DAC, workarounds, see this function body to know more
 static void s_disable_dac(adc_oneshot_hal_ctx_t *hal, adc_channel_t channel);
 #endif
@@ -35,6 +35,8 @@ void adc_oneshot_hal_init(adc_oneshot_hal_ctx_t *hal, const adc_oneshot_hal_cfg_
 {
     hal->unit = config->unit;
     hal->work_mode = config->work_mode;
+    hal->clk_src = config->clk_src;
+    hal->clk_src_freq_hz = config->clk_src_freq_hz;
 }
 
 void adc_oneshot_hal_channel_config(adc_oneshot_hal_ctx_t *hal, const adc_oneshot_hal_chan_cfg_t *config, adc_channel_t chan)
@@ -52,20 +54,20 @@ void adc_oneshot_hal_setup(adc_oneshot_hal_ctx_t *hal, adc_channel_t chan)
     adc_ll_amp_disable();  //Currently the LNA is not open, close it by default.
 #endif
 
-#if SOC_DAC_SUPPORTED
+#if CONFIG_ADC_DISABLE_DAC_OUTPUT
     s_disable_dac(hal, chan);
 #endif
 
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
-    adc_ll_digi_clk_sel(0);
+    adc_ll_digi_clk_sel(hal->clk_src);
 #else
-    adc_ll_set_sar_clk_div(unit, ADC_HAL_SAR_CLK_DIV_DEFAULT(unit));
+    adc_ll_set_sar_clk_div(unit, ADC_LL_SAR_CLK_DIV_DEFAULT(unit));
     if (unit == ADC_UNIT_2) {
-        adc_ll_pwdet_set_cct(ADC_HAL_PWDET_CCT_DEFAULT);
+        adc_ll_pwdet_set_cct(ADC_LL_PWDET_CCT_DEFAULT);
     }
 #endif
 
-    adc_oneshot_ll_output_invert(unit, ADC_HAL_DATA_INVERT_DEFAULT(unit));
+    adc_oneshot_ll_output_invert(unit, ADC_LL_DATA_INVERT_DEFAULT(unit));
     adc_oneshot_ll_set_atten(unit, chan, hal->chan_configs[chan].atten);
     adc_oneshot_ll_set_output_bits(unit, hal->chan_configs[chan].bitwidth);
     adc_oneshot_ll_set_channel(unit, chan);
@@ -77,28 +79,29 @@ void adc_oneshot_hal_setup(adc_oneshot_hal_ctx_t *hal, adc_channel_t chan)
 #endif //#if SOC_ADC_ARBITER_SUPPORTED
 }
 
-static void adc_hal_onetime_start(adc_unit_t unit)
+static void adc_hal_onetime_start(adc_unit_t unit, uint32_t clk_src_freq_hz)
 {
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
     (void)unit;
+    uint32_t delay = 0;
     /**
      * There is a hardware limitation. If the APB clock frequency is high, the step of this reg signal: ``onetime_start`` may not be captured by the
      * ADC digital controller (when its clock frequency is too slow). A rough estimate for this step should be at least 3 ADC digital controller
      * clock cycle.
-     *
-     * This limitation will be removed in hardware future versions.
-     *
      */
-    uint32_t digi_clk = APB_CLK_FREQ / (ADC_LL_CLKM_DIV_NUM_DEFAULT + ADC_LL_CLKM_DIV_A_DEFAULT / ADC_LL_CLKM_DIV_B_DEFAULT + 1);
+    uint32_t digi_clk = clk_src_freq_hz / (ADC_LL_CLKM_DIV_NUM_DEFAULT + ADC_LL_CLKM_DIV_A_DEFAULT / ADC_LL_CLKM_DIV_B_DEFAULT + 1);
     //Convert frequency to time (us). Since decimals are removed by this division operation. Add 1 here in case of the fact that delay is not enough.
-    uint32_t delay = (1000 * 1000) / digi_clk + 1;
+    delay = (1000 * 1000) / digi_clk + 1;
     //3 ADC digital controller clock cycle
     delay = delay * 3;
-    //This coefficient (8) is got from test. When digi_clk is not smaller than ``APB_CLK_FREQ/8``, no delay is needed.
+    HAL_EARLY_LOGD("adc_hal", "clk_src_freq_hz: %d, digi_clk: %d, delay: %d", clk_src_freq_hz, digi_clk, delay);
+
+    //This coefficient (8) is got from test, and verified from DT. When digi_clk is not smaller than ``APB_CLK_FREQ/8``, no delay is needed.
     if (digi_clk >= APB_CLK_FREQ/8) {
         delay = 0;
     }
 
+    HAL_EARLY_LOGD("adc_hal", "delay: %d", delay);
     adc_oneshot_ll_start(false);
     esp_rom_delay_us(delay);
     adc_oneshot_ll_start(true);
@@ -123,7 +126,7 @@ bool adc_oneshot_hal_convert(adc_oneshot_hal_ctx_t *hal, int *out_raw)
     adc_oneshot_ll_disable_all_unit();
     adc_oneshot_ll_enable(hal->unit);
 
-    adc_hal_onetime_start(hal->unit);
+    adc_hal_onetime_start(hal->unit, hal->clk_src_freq_hz);
     while (!adc_oneshot_ll_get_event(event)) {
         ;
     }
@@ -144,7 +147,7 @@ bool adc_oneshot_hal_convert(adc_oneshot_hal_ctx_t *hal, int *out_raw)
 /*---------------------------------------------------------------
                     Workarounds
 ---------------------------------------------------------------*/
-#if SOC_DAC_SUPPORTED
+#if CONFIG_ADC_DISABLE_DAC_OUTPUT
 static void s_disable_dac(adc_oneshot_hal_ctx_t *hal, adc_channel_t channel)
 {
     /**
@@ -158,19 +161,19 @@ static void s_disable_dac(adc_oneshot_hal_ctx_t *hal, adc_channel_t channel)
 #if CONFIG_IDF_TARGET_ESP32
     if (hal->unit == ADC_UNIT_2) {
         if (channel == ADC_CHANNEL_8) {
-            dac_ll_power_down(DAC_CHANNEL_1);  // the same as DAC channel 1
+            dac_ll_power_down(DAC_CHAN_0);  // the same as DAC channel 0
         }
         if (channel == ADC_CHANNEL_9) {
-            dac_ll_power_down(DAC_CHANNEL_2);
+            dac_ll_power_down(DAC_CHAN_1);
         }
     }
 #elif CONFIG_IDF_TARGET_ESP32S2
     if (hal->unit == ADC_UNIT_2) {
         if (channel == ADC_CHANNEL_6) {
-            dac_ll_power_down(DAC_CHANNEL_1);  // the same as DAC channel 1
+            dac_ll_power_down(DAC_CHAN_0);  // the same as DAC channel 0
         }
         if (channel == ADC_CHANNEL_7) {
-            dac_ll_power_down(DAC_CHANNEL_2);
+            dac_ll_power_down(DAC_CHAN_1);
         }
     }
 #else

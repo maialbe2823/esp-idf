@@ -66,7 +66,7 @@ static void sdp_disable_handler(void)
     msg.pid = BTC_PID_SDP;
     msg.act = BTA_SDP_DISENABLE_EVT;
 
-    status = btc_transfer_context(&msg, NULL, 0, NULL);
+    status = btc_transfer_context(&msg, NULL, 0, NULL, NULL);
 
     if (status != BT_STATUS_SUCCESS) {
         BTC_TRACE_ERROR("%s btc_transfer_context failed", __func__);
@@ -855,7 +855,7 @@ static void btc_sdp_dm_cback(tBTA_SDP_EVT event, tBTA_SDP* p_data, void* user_da
     msg.pid = BTC_PID_SDP;
     msg.act = event;
 
-    status = btc_transfer_context(&msg, p_data, sizeof(tBTA_SDP), NULL);
+    status = btc_transfer_context(&msg, p_data, sizeof(tBTA_SDP), NULL, NULL);
 
     if (status != BT_STATUS_SUCCESS) {
         BTC_TRACE_ERROR("%s btc_transfer_context failed", __func__);
@@ -1111,7 +1111,7 @@ void btc_sdp_cb_handler(btc_msg_t *msg)
         btc_sdp_cb_to_app(ESP_SDP_DEINIT_EVT, &param);
         break;
     case BTA_SDP_SEARCH_COMP_EVT:
-        param.search.status = p_data->status;
+        param.search.status = p_data->sdp_search_comp.status;
         if (param.search.status == ESP_SDP_SUCCESS) {
             memcpy(param.search.remote_addr, p_data->sdp_search_comp.remote_addr, sizeof(BD_ADDR));
             memcpy(&param.search.sdp_uuid, &p_data->sdp_search_comp.uuid, sizeof(tSDP_UUID));
@@ -1131,8 +1131,8 @@ void btc_sdp_cb_handler(btc_msg_t *msg)
         }
         break;
     case BTA_SDP_CREATE_RECORD_USER_EVT:
-        param.create_record.status = p_data->status;
-        param.create_record.record_handle = p_data->handle;
+        param.create_record.status = p_data->sdp_create_record.status;
+        param.create_record.record_handle = p_data->sdp_create_record.handle;
         btc_sdp_cb_to_app(ESP_SDP_CREATE_RECORD_COMP_EVT, &param);
         break;
     case BTA_SDP_REMOVE_RECORD_USER_EVT:

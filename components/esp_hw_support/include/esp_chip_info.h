@@ -24,8 +24,11 @@ typedef enum {
     CHIP_ESP32S2 = 2, //!< ESP32-S2
     CHIP_ESP32S3 = 9, //!< ESP32-S3
     CHIP_ESP32C3 = 5, //!< ESP32-C3
-    CHIP_ESP32H2 = 6, //!< ESP32-H2
+    CHIP_ESP32H4 = 6, //!< ESP32-H4
     CHIP_ESP32C2 = 12, //!< ESP32-C2
+    CHIP_ESP32C6 = 13, //!< ESP32-C6
+    CHIP_ESP32H2 = 16, //!< ESP32-H2
+    CHIP_POSIX_LINUX = 999, //!< The code is running on POSIX/Linux simulator
 } esp_chip_model_t;
 
 /* Chip feature flags, used in esp_chip_info_t */

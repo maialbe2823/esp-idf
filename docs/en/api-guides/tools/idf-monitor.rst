@@ -4,7 +4,7 @@ IDF Monitor
 
 :link_to_translation:`zh_CN:[中文]`
 
-IDF Monitor is mainly a serial terminal program which relays serial data to and from the target device's serial port. It also provides some IDF-specific features.
+IDF Monitor uses the esp-idf-monitor_ package as a serial terminal program which relays serial data to and from the target device's serial port. It also provides some IDF-specific features.
 
 IDF Monitor can be launched from an IDF project by running ``idf.py monitor``.
 
@@ -61,7 +61,7 @@ For easy interaction with IDF Monitor, use the keyboard shortcuts given in the t
      -
    * - Ctrl+C
      - Interrupt running application
-     - Pauses IDF Monitor and run GDB_ project debugger to debug the application at runtime. This requires :ref:CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME option to be enabled.
+     - Pauses IDF Monitor and runs GDB_ project debugger to debug the application at runtime. This requires :ref:CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME option to be enabled.
 
 Any keys pressed, other than ``Ctrl-]`` and ``Ctrl-T``, will be sent through the serial port.
 
@@ -72,13 +72,13 @@ IDF-specific features
 Automatic Address Decoding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Whenever ESP-IDF outputs a hexadecimal code address of the form ``0x4_______``, IDF Monitor uses ``addr2line_`` to look up the location in the source code and find the function name.
+Whenever the chip outputs a hexadecimal address that points to executable code, IDF monitor looks up the location in the source code (file name and line number) and prints the location on the next line in yellow.
 
 .. highlight:: none
 
 .. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
-  If an ESP-IDF app crashes and panics, a register dump and backtrace is produced, such as the following::
+  If an ESP-IDF app crashes and panics, a register dump and backtrace are produced, such as the following::
 
       Guru Meditation Error of type StoreProhibited occurred on core  0. Exception was unhandled.
       Register dump:
@@ -182,12 +182,12 @@ To decode each address, IDF Monitor runs the following command in the background
 
 .. note::
 
-    Set environment variable ``ESP_MONITOR_DECODE`` to ``0`` or call idf_monitor.py with specific command line option: ``idf_monitor.py --disable-address-decoding`` to disable address decoding.
+    Set environment variable ``ESP_MONITOR_DECODE`` to ``0`` or call esp_idf_monitor with specific command line option: ``python -m esp_idf_monitor --disable-address-decoding`` to disable address decoding.
 
 Target Reset on Connection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, IDF Monitor will reset the target when connecting to it. The reset of the target chip is performed using the DTR and RTS serial lines. To prevent IDF Monitor from automatically resetting the target on connection, call IDF Monitor with the ``--no-reset`` option (e.g., ``idf_monitor.py --no-reset``).
+By default, IDF Monitor will reset the target when connecting to it. The reset of the target chip is performed using the DTR and RTS serial lines. To prevent IDF Monitor from automatically resetting the target on connection, call IDF Monitor with the ``--no-reset`` option (e.g., ``idf.py monitor --no-reset``).
 
 .. note::
 
@@ -281,6 +281,7 @@ Issues Observed on Windows
 - When "gdb" is run, it might stall for a short time before it begins communicating with the GDBStub.
 
 .. _addr2line: https://sourceware.org/binutils/docs/binutils/addr2line.html
+.. _esp-idf-monitor: https://github.com/espressif/esp-idf-monitor
 .. _gdb: https://sourceware.org/gdb/download/onlinedocs/
 .. _pySerial: https://github.com/pyserial/pyserial
 .. _miniterm: https://pyserial.readthedocs.org/en/latest/tools.html#module-serial.tools.miniterm

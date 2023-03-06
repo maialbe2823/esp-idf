@@ -99,6 +99,7 @@ extern "C" {
 #define RTC_CNTL_WAKEUP_DELAY_CYCLES            (5)
 #define RTC_CNTL_OTHER_BLOCKS_POWERUP_CYCLES    (1)
 #define RTC_CNTL_OTHER_BLOCKS_WAIT_CYCLES       (1)
+#define RTC_CNTL_MIN_SLP_VAL_MIN                (2)
 
 /*
 set sleep_init default param
@@ -397,6 +398,10 @@ void rtc_clk_cpu_freq_get_config(rtc_cpu_freq_config_t *out_config);
  * Short form for filling in rtc_cpu_freq_config_t structure and calling
  * rtc_clk_cpu_freq_set_config when a switch to XTAL is needed.
  * Assumes that XTAL frequency has been determined — don't call in startup code.
+ *
+ * @note This function always disables BBPLL after switching the CPU clock source to XTAL for power saving purpose.
+ * If this is unwanted, please use rtc_clk_cpu_freq_set_config. It helps to check whether USB Serial JTAG is in use,
+ * if so, then BBPLL will not be turned off.
  */
 void rtc_clk_cpu_freq_set_xtal(void);
 
@@ -429,6 +434,11 @@ uint32_t rtc_clk_cal_internal(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles);
  * of cycles to be counted exceeds the expected time twice. This may happen if
  * 32k XTAL is being calibrated, but the oscillator has not started up (due to
  * incorrect loading capacitance, board design issue, or lack of 32 XTAL on board).
+ *
+ * @note When 32k CLK is being calibrated, this function will check the accuracy
+ * of the clock. Since the xtal 32k or ext osc 32k is generally very stable, if
+ * the check fails, then consider this an invalid 32k clock and return 0. This
+ * check can filter some jamming signal.
  *
  * @param cal_clk  clock to be measured
  * @param slow_clk_cycles  number of slow clock cycles to average
@@ -476,10 +486,6 @@ uint64_t rtc_time_slowclk_to_us(uint64_t rtc_cycles, uint32_t period);
  * @return current value of RTC counter
  */
 uint64_t rtc_time_get(void);
-
-uint64_t rtc_light_slp_time_get(void);
-
-uint64_t rtc_deep_slp_time_get(void);
 
 /**
  * @brief Busy loop until next RTC_SLOW_CLK cycle
@@ -637,13 +643,6 @@ void rtc_sleep_init(rtc_sleep_config_t cfg);
  */
 void rtc_sleep_low_init(uint32_t slowclk_period);
 
-/**
- * @brief Set target value of RTC counter for RTC_TIMER_TRIG_EN wakeup source
- * @param t value of RTC counter at which wakeup from sleep will happen;
- *          only the lower 48 bits are used
- */
-void rtc_sleep_set_wakeup_time(uint64_t t);
-
 #define RTC_GPIO_TRIG_EN            BIT(2)  //!< GPIO wakeup
 #define RTC_TIMER_TRIG_EN           BIT(3)  //!< Timer wakeup
 #define RTC_WIFI_TRIG_EN            BIT(5)  //!< WIFI wakeup (light sleep only)
@@ -757,37 +756,6 @@ typedef struct {
  * @param cfg configuration options as rtc_config_t
  */
 void rtc_init(rtc_config_t cfg);
-
-/**
- * Structure describing vddsdio configuration
- */
-typedef struct {
-    uint32_t force : 1;     //!< If 1, use configuration from RTC registers; if 0, use EFUSE/bootstrapping pins.
-    uint32_t enable : 1;    //!< Enable VDDSDIO regulator
-    uint32_t tieh  : 1;     //!< Select VDDSDIO voltage. One of RTC_VDDSDIO_TIEH_1_8V, RTC_VDDSDIO_TIEH_3_3V
-    uint32_t drefh : 2;     //!< Tuning parameter for VDDSDIO regulator
-    uint32_t drefm : 2;     //!< Tuning parameter for VDDSDIO regulator
-    uint32_t drefl : 2;     //!< Tuning parameter for VDDSDIO regulator
-} rtc_vddsdio_config_t;
-
-/**
- * Get current VDDSDIO configuration
- * If VDDSDIO configuration is overridden by RTC, get values from RTC
- * Otherwise, if VDDSDIO is configured by EFUSE, get values from EFUSE
- * Otherwise, use default values and the level of MTDI bootstrapping pin.
- * @return currently used VDDSDIO configuration
- */
-rtc_vddsdio_config_t rtc_vddsdio_get_config(void);
-
-/**
- * Set new VDDSDIO configuration using RTC registers.
- * If config.force == 1, this overrides configuration done using bootstrapping
- * pins and EFUSE.
- *
- * @param config new VDDSDIO configuration
- */
-void rtc_vddsdio_set_config(rtc_vddsdio_config_t config);
-
 
 // -------------------------- CLOCK TREE DEFS ALIAS ----------------------------
 // **WARNING**: The following are only for backwards compatibility.

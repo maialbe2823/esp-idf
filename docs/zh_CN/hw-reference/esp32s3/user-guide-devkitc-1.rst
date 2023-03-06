@@ -17,7 +17,7 @@ ESP32-S3-DevKitC-1 是一款入门级开发板，搭载 Wi-Fi + Bluetooth® LE �
     :alt: ESP32-S3-DevKitC-1（板载 ESP32-S3-WROOM-1 模组）
 
     ESP32-S3-DevKitC-1（板载 ESP32-S3-WROOM-1 模组）
-    
+
 
 本指南包括如下内容：
 
@@ -38,7 +38,7 @@ ESP32-S3-DevKitC-1 是一款入门级开发板，搭载 Wi-Fi + Bluetooth® LE �
 
 .. _user-guide-s3-devkitc-1-v1.1-board-front:
 
-.. figure:: ../../../_static/ESP32-S3-DevKitC-1_v1.1-annotated-photo.png
+.. figure:: ../../../_static/ESP32-S3-DevKitC-1_v2-annotated-photo.png
     :align: center
     :alt: ESP32-S3-DevKitC-1 - 正面
 
@@ -64,7 +64,7 @@ ESP32-S3-DevKitC-1 是一款入门级开发板，搭载 Wi-Fi + Bluetooth® LE �
      - 下载按键。按住 **Boot** 键的同时按一下 **Reset** 键进入“固件下载”模式，通过串口下载固件。
    * - Reset Button（Reset 键）
      - 复位按键。
-   * - ESP32-S3 USB Port（ESP32-S3 USB 接口）
+   * - USB Port（USB 接口）
      - ESP32-S3 USB OTG 接口，支持全速 USB 1.1 标准。ESP32-S3 USB 接口可用作开发板的供电接口，可烧录固件至芯片，可通过 USB 协议与芯片通信，也可用于 JTAG 调试。
    * - USB-to-UART Bridge（USB 转 UART 桥接器）
      - 单芯片 USB 至 UART 桥接器，可提供高达 3 Mbps 的传输速率。
@@ -75,7 +75,7 @@ ESP32-S3-DevKitC-1 是一款入门级开发板，搭载 Wi-Fi + Bluetooth® LE �
 
 .. note::
 
-  板载 ESP32-S3-WROOM-2 模组系列的开发板中，管脚 GPIO35、GPIO36 和 GPIO37 已用于内部 ESP32-S3 芯片与 SPI flash/PSRAM 之间的通信，外部不可使用。
+  在板载 ESP32-S3-WROOM-1/1U 模组系列（使用 8 线 SPI flash/PSRAM）的开发板和板载 ESP32-S3-WROOM-2 模组系列的开发板中，管脚 GPIO35、GPIO36 和 GPIO37 已用于内部 ESP32-S3 芯片与 SPI flash/PSRAM 之间的通信，外部不可使用。
 
 
 开始开发应用
@@ -99,7 +99,7 @@ ESP32-S3-DevKitC-1 是一款入门级开发板，搭载 Wi-Fi + Bluetooth® LE �
 硬件设置
 ^^^^^^^^
 
-通过 **USB 转 UART 接口** 连接开发板与电脑。软件暂不支持通过 **ESP32-S3 USB 接口** 连接。在后续步骤中，默认使用 **USB 转 UART 接口**。
+通过 **USB 转 UART 接口** 或 **ESP32-S3 USB 接口** 连接开发板与电脑。在后续步骤中，默认使用 **USB 转 UART 接口**。
 
 
 软件设置
@@ -262,9 +262,9 @@ J3
 1      G     G            接地
 2      TX    I/O/T        U0TXD, GPIO43, CLK_OUT1
 3      RX    I/O/T        U0RXD, GPIO44, CLK_OUT2
-4      1     I/O/T        RTC_GPIO1, GPIO1, TOUCH1, ADC1_CH0 
-5      2     I/O/T        RTC_GPIO2, GPIO2, TOUCH2, ADC1_CH1 
-6      42    I/O/T        MTMS, GPIO42 
+4      1     I/O/T        RTC_GPIO1, GPIO1, TOUCH1, ADC1_CH0
+5      2     I/O/T        RTC_GPIO2, GPIO2, TOUCH2, ADC1_CH1
+6      42    I/O/T        MTMS, GPIO42
 7      41    I/O/T        MTDI, GPIO41, CLK_OUT1
 8      40    I/O/T        MTDO, GPIO40, CLK_OUT2
 9      39    I/O/T        MTCK, GPIO39, CLK_OUT3, SUBSPICS1
@@ -318,7 +318,7 @@ J3
 - `ESP32-S3 技术规格书 <https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_cn.pdf>`_ (PDF)
 - `ESP32-S3-WROOM-1 & ESP32-S3-WROOM-1U 技术规格书 <https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_cn.pdf>`_ (PDF)
 - `ESP32-S3-WROOM-2 技术规格书 <https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-2_datasheet_cn.pdf>`_ (PDF)
-- `ESP32-S3-DevKitC-1 原理图 <https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-DevKitC-1_V1.1_20220413.pdf>`_ (PDF)
+- `ESP32-S3-DevKitC-1 原理图 <https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-DevKitC-1_V1.1_20221130.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 PCB 布局图 <https://dl.espressif.com/dl/schematics/PCB_ESP32-S3-DevKitC-1_V1.1_20220429.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 尺寸图 <https://dl.espressif.com/dl/DXF_ESP32-S3-DevKitC-1_V1_20210312CB.pdf>`_ (PDF)
 - `ESP32-S3-DevKitC-1 尺寸图源文件 <https://dl.espressif.com/dl/DXF_ESP32-S3-DevKitC-1_V1_20210312CB.dxf>`_ (DXF) - 可使用 `Autodesk Viewer <https://viewer.autodesk.com/>`_ 查看

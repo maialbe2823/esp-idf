@@ -7,6 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include <stdio.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "soc/efuse_reg.h"
@@ -99,14 +100,15 @@ static void example_print_chip_info(void)
             (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
             (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
 
-    printf("silicon revision %d, ", chip_info.revision);
+    unsigned major_rev = chip_info.revision / 100;
+    unsigned minor_rev = chip_info.revision % 100;
+    printf("silicon revision v%d.%d, ", major_rev, minor_rev);
     if(esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
         printf("Get flash size failed");
         return;
     }
-
-    printf("%dMB %s flash\n", flash_size / (1024 * 1024),
-            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    printf("%" PRIu32 "MB %s flash\n", flash_size / (1024 * 1024),
+           (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 }
 
 
@@ -114,7 +116,7 @@ static void example_print_flash_encryption_status(void)
 {
     uint32_t flash_crypt_cnt = 0;
     esp_efuse_read_field_blob(TARGET_CRYPT_CNT_EFUSE, &flash_crypt_cnt, TARGET_CRYPT_CNT_WIDTH);
-    printf("FLASH_CRYPT_CNT eFuse value is %d\n", flash_crypt_cnt);
+    printf("FLASH_CRYPT_CNT eFuse value is %" PRIu32 "\n", flash_crypt_cnt);
 
     esp_flash_enc_mode_t mode = esp_get_flash_encryption_mode();
     if (mode == ESP_FLASH_ENC_MODE_DISABLED) {
@@ -132,7 +134,7 @@ static void example_read_write_flash(void)
         ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
     assert(partition);
 
-    printf("Erasing partition \"%s\" (0x%x bytes)\n", partition->label, partition->size);
+    printf("Erasing partition \"%s\" (0x%" PRIx32 " bytes)\n", partition->label, partition->size);
 
     ESP_ERROR_CHECK(esp_partition_erase_range(partition, 0, partition->size));
 

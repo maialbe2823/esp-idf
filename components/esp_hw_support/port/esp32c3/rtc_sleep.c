@@ -16,6 +16,7 @@
 #include "soc/fe_reg.h"
 #include "soc/timer_group_reg.h"
 #include "soc/system_reg.h"
+#include "soc/chip_revision.h"
 #include "esp32c3/rom/ets_sys.h"
 #include "esp32c3/rom/rtc.h"
 #include "regi2c_ctrl.h"
@@ -76,8 +77,8 @@ void rtc_sleep_get_default_config(uint32_t sleep_flags, rtc_sleep_config_t *out_
 
     if (sleep_flags & RTC_SLEEP_PD_DIG) {
         unsigned atten_deep_sleep = RTC_CNTL_DBG_ATTEN_DEEPSLEEP_DEFAULT;
-#if CONFIG_ESP32C3_REV_MIN < 3
-        if (efuse_hal_get_minor_chip_version() < 3) {
+#if CONFIG_ESP32C3_REV_MIN_FULL < 3
+        if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 3)) {
             atten_deep_sleep = 0; /* workaround for deep sleep issue in high temp on ECO2 and below */
         }
 #endif
@@ -187,12 +188,6 @@ void rtc_sleep_low_init(uint32_t slowclk_period)
     REG_SET_FIELD(RTC_CNTL_TIMER1_REG, RTC_CNTL_PLL_BUF_WAIT, RTC_CNTL_PLL_BUF_WAIT_SLP_CYCLES);
     REG_SET_FIELD(RTC_CNTL_TIMER1_REG, RTC_CNTL_XTL_BUF_WAIT, rtc_time_us_to_slowclk(RTC_CNTL_XTL_BUF_WAIT_SLP_US, slowclk_period));
     REG_SET_FIELD(RTC_CNTL_TIMER1_REG, RTC_CNTL_CK8M_WAIT, RTC_CNTL_CK8M_WAIT_SLP_CYCLES);
-}
-
-void rtc_sleep_set_wakeup_time(uint64_t t)
-{
-    WRITE_PERI_REG(RTC_CNTL_SLP_TIMER0_REG, t & UINT32_MAX);
-    WRITE_PERI_REG(RTC_CNTL_SLP_TIMER1_REG, t >> 32);
 }
 
 static uint32_t rtc_sleep_finish(uint32_t lslp_mem_inf_fpu);

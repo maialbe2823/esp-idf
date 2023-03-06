@@ -31,6 +31,8 @@ extern "C" {
 #define CLK_LL_PLL_320M_FREQ_MHZ   (320)
 #define CLK_LL_PLL_480M_FREQ_MHZ   (480)
 
+#define CLK_LL_AHB_MAX_FREQ_MHZ    CLK_LL_PLL_80M_FREQ_MHZ
+
 #define CLK_LL_XTAL32K_CONFIG_DEFAULT() { \
     .dac = 3, \
     .dres = 3, \
@@ -80,7 +82,7 @@ static inline __attribute__((always_inline)) void clk_ll_bbpll_disable(void)
  *
  * @param mode Used to determine the xtal32k configuration parameters
  */
-static inline void clk_ll_xtal32k_enable(clk_ll_xtal32k_enable_mode_t mode)
+static inline __attribute__((always_inline)) void clk_ll_xtal32k_enable(clk_ll_xtal32k_enable_mode_t mode)
 {
     // Configure xtal32k
     clk_ll_xtal32k_config_t cfg = CLK_LL_XTAL32K_CONFIG_DEFAULT();
@@ -99,7 +101,7 @@ static inline void clk_ll_xtal32k_enable(clk_ll_xtal32k_enable_mode_t mode)
 /**
  * @brief Disable the 32kHz crystal oscillator
  */
-static inline void clk_ll_xtal32k_disable(void)
+static inline __attribute__((always_inline)) void clk_ll_xtal32k_disable(void)
 {
     // Set xtal32k xpd to be controlled by software
     SET_PERI_REG_MASK(RTC_CNTL_EXT_XTL_CONF_REG, RTC_CNTL_XTAL32K_XPD_FORCE);
@@ -112,7 +114,7 @@ static inline void clk_ll_xtal32k_disable(void)
  *
  * @return True if the 32kHz XTAL is enabled
  */
-static inline bool clk_ll_xtal32k_is_enabled(void)
+static inline __attribute__((always_inline)) bool clk_ll_xtal32k_is_enabled(void)
 {
     uint32_t xtal_conf = READ_PERI_REG(RTC_CNTL_EXT_XTL_CONF_REG);
     /* If xtal xpd is controlled by software */
@@ -147,7 +149,7 @@ static inline __attribute__((always_inline)) void clk_ll_rc_fast_disable(void)
  *
  * @return True if the oscillator is enabled
  */
-static inline bool clk_ll_rc_fast_is_enabled(void)
+static inline __attribute__((always_inline)) bool clk_ll_rc_fast_is_enabled(void)
 {
     return GET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_ENB_CK8M) == 0;
 }
@@ -160,7 +162,7 @@ static inline bool clk_ll_rc_fast_is_enabled(void)
  * so is not exposed in the code.
  * The output of the divider, RC_FAST_D256_CLK, is referred as 8md256 or simply d256 in reg. descriptions.
  */
-static inline void clk_ll_rc_fast_d256_enable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_d256_enable(void)
 {
     CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_ENB_CK8M_DIV);
 }
@@ -171,7 +173,7 @@ static inline void clk_ll_rc_fast_d256_enable(void)
  *
  * Disabling this divider could reduce power consumption.
  */
-static inline void clk_ll_rc_fast_d256_disable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_d256_disable(void)
 {
     SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_ENB_CK8M_DIV);
 }
@@ -181,7 +183,7 @@ static inline void clk_ll_rc_fast_d256_disable(void)
  *
  * @return True if the divided output is enabled
  */
-static inline bool clk_ll_rc_fast_d256_is_enabled(void)
+static inline __attribute__((always_inline)) bool clk_ll_rc_fast_d256_is_enabled(void)
 {
     return GET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_ENB_CK8M_DIV) == 0;
 }
@@ -189,7 +191,7 @@ static inline bool clk_ll_rc_fast_d256_is_enabled(void)
 /**
  * @brief Enable the digital RC_FAST_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_rc_fast_digi_enable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_digi_enable(void)
 {
     SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_EN_M);
 }
@@ -197,7 +199,7 @@ static inline void clk_ll_rc_fast_digi_enable(void)
 /**
  * @brief Disable the digital RC_FAST_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_rc_fast_digi_disable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_digi_disable(void)
 {
     CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_EN_M);
 }
@@ -207,7 +209,7 @@ static inline void clk_ll_rc_fast_digi_disable(void)
  *
  * @return True if the digital RC_FAST_CLK is enabled
  */
-static inline bool clk_ll_rc_fast_digi_is_enabled(void)
+static inline __attribute__((always_inline)) bool clk_ll_rc_fast_digi_is_enabled(void)
 {
     return GET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_EN_M);
 }
@@ -215,7 +217,7 @@ static inline bool clk_ll_rc_fast_digi_is_enabled(void)
 /**
  * @brief Enable the digital RC_FAST_D256_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_rc_fast_d256_digi_enable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_d256_digi_enable(void)
 {
     SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_D256_EN_M);
 }
@@ -223,7 +225,7 @@ static inline void clk_ll_rc_fast_d256_digi_enable(void)
 /**
  * @brief Disable the digital RC_FAST_D256_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_rc_fast_d256_digi_disable(void)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_d256_digi_disable(void)
 {
     CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_D256_EN_M);
 }
@@ -231,7 +233,7 @@ static inline void clk_ll_rc_fast_d256_digi_disable(void)
 /**
  * @brief Enable the digital XTAL32K_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_xtal32k_digi_enable(void)
+static inline __attribute__((always_inline)) void clk_ll_xtal32k_digi_enable(void)
 {
     SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_XTAL32K_EN_M);
 }
@@ -239,7 +241,7 @@ static inline void clk_ll_xtal32k_digi_enable(void)
 /**
  * @brief Disable the digital XTAL32K_CLK, which is used to support peripherals.
  */
-static inline void clk_ll_xtal32k_digi_disable(void)
+static inline __attribute__((always_inline)) void clk_ll_xtal32k_digi_disable(void)
 {
     CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_XTAL32K_EN_M);
 }
@@ -249,7 +251,7 @@ static inline void clk_ll_xtal32k_digi_disable(void)
  *
  * @return True if the digital XTAL32K_CLK is enabled
  */
-static inline bool clk_ll_xtal32k_digi_is_enabled(void)
+static inline __attribute__((always_inline)) bool clk_ll_xtal32k_digi_is_enabled(void)
 {
     return REG_GET_FIELD(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_XTAL32K_EN);
 }
@@ -499,7 +501,7 @@ static inline __attribute__((always_inline)) uint32_t clk_ll_cpu_get_divider(voi
  *
  * @param in_sel One of the clock sources in soc_rtc_slow_clk_src_t
  */
-static inline void clk_ll_rtc_slow_set_src(soc_rtc_slow_clk_src_t in_sel)
+static inline __attribute__((always_inline)) void clk_ll_rtc_slow_set_src(soc_rtc_slow_clk_src_t in_sel)
 {
     switch (in_sel) {
     case SOC_RTC_SLOW_CLK_SRC_RC_SLOW:
@@ -522,7 +524,7 @@ static inline void clk_ll_rtc_slow_set_src(soc_rtc_slow_clk_src_t in_sel)
  *
  * @return Currently selected clock source (one of soc_rtc_slow_clk_src_t values)
  */
-static inline soc_rtc_slow_clk_src_t clk_ll_rtc_slow_get_src(void)
+static inline __attribute__((always_inline)) soc_rtc_slow_clk_src_t clk_ll_rtc_slow_get_src(void)
 {
     uint32_t clk_sel = REG_GET_FIELD(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_ANA_CLK_RTC_SEL);
     switch (clk_sel) {
@@ -544,7 +546,7 @@ static inline soc_rtc_slow_clk_src_t clk_ll_rtc_slow_get_src(void)
  *
  * @param in_sel One of the clock sources in soc_rtc_fast_clk_src_t
  */
-static inline void clk_ll_rtc_fast_set_src(soc_rtc_fast_clk_src_t in_sel)
+static inline __attribute__((always_inline)) void clk_ll_rtc_fast_set_src(soc_rtc_fast_clk_src_t in_sel)
 {
     switch (in_sel) {
     case SOC_RTC_FAST_CLK_SRC_XTAL_D2:
@@ -564,7 +566,7 @@ static inline void clk_ll_rtc_fast_set_src(soc_rtc_fast_clk_src_t in_sel)
  *
  * @return Currently selected clock source (one of soc_rtc_fast_clk_src_t values)
  */
-static inline soc_rtc_fast_clk_src_t clk_ll_rtc_fast_get_src(void)
+static inline __attribute__((always_inline)) soc_rtc_fast_clk_src_t clk_ll_rtc_fast_get_src(void)
 {
     uint32_t clk_sel = REG_GET_FIELD(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_FAST_CLK_RTC_SEL);
     switch (clk_sel) {
@@ -582,7 +584,7 @@ static inline soc_rtc_fast_clk_src_t clk_ll_rtc_fast_get_src(void)
  *
  * @param divider Divider of RC_FAST_CLK. Usually this divider is set to 1 (reg. value is 0) in bootloader stage.
  */
-static inline void clk_ll_rc_fast_set_divider(uint32_t divider)
+static inline __attribute__((always_inline)) void clk_ll_rc_fast_set_divider(uint32_t divider)
 {
     HAL_ASSERT(divider > 0);
     CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_DIV_SEL_VLD);
@@ -595,7 +597,7 @@ static inline void clk_ll_rc_fast_set_divider(uint32_t divider)
  *
  * @return Divider. Divider = (CK8M_DIV_SEL + 1).
  */
-static inline uint32_t clk_ll_rc_fast_get_divider(void)
+static inline __attribute__((always_inline)) uint32_t clk_ll_rc_fast_get_divider(void)
 {
     return REG_GET_FIELD(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_DIV_SEL) + 1;
 }
@@ -605,7 +607,7 @@ static inline uint32_t clk_ll_rc_fast_get_divider(void)
  *
  * @param divider Divider of RC_SLOW_CLK. Usually this divider is set to 1 (reg. value is 0) in bootloader stage.
  */
-static inline void clk_ll_rc_slow_set_divider(uint32_t divider)
+static inline __attribute__((always_inline)) void clk_ll_rc_slow_set_divider(uint32_t divider)
 {
     HAL_ASSERT(divider > 0);
     CLEAR_PERI_REG_MASK(RTC_CNTL_SLOW_CLK_CONF_REG, RTC_CNTL_ANA_CLK_DIV_VLD);
@@ -620,10 +622,18 @@ static inline void clk_ll_rc_slow_set_divider(uint32_t divider)
  * Value of RTC_XTAL_FREQ_REG is stored as two copies in lower and upper 16-bit
  * halves. These are the routines to work with that representation.
  *
- * @param xtal_freq_mhz XTAL frequency, in MHz
+ * @param xtal_freq_mhz XTAL frequency, in MHz. The frequency must necessarily be even,
+ * otherwise there will be a conflict with the low bit, which is used to disable logs
+ * in the ROM code.
  */
-static inline void clk_ll_xtal_store_freq_mhz(uint32_t xtal_freq_mhz)
+static inline __attribute__((always_inline)) void clk_ll_xtal_store_freq_mhz(uint32_t xtal_freq_mhz)
 {
+    // Read the status of whether disabling logging from ROM code
+    uint32_t reg = READ_PERI_REG(RTC_XTAL_FREQ_REG) & RTC_DISABLE_ROM_LOG;
+    // If so, need to write back this setting
+    if (reg == RTC_DISABLE_ROM_LOG) {
+        xtal_freq_mhz |= 1;
+    }
     WRITE_PERI_REG(RTC_XTAL_FREQ_REG, (xtal_freq_mhz & UINT16_MAX) | ((xtal_freq_mhz & UINT16_MAX) << 16));
 }
 
@@ -641,7 +651,7 @@ static inline __attribute__((always_inline)) uint32_t clk_ll_xtal_load_freq_mhz(
     uint32_t xtal_freq_reg = READ_PERI_REG(RTC_XTAL_FREQ_REG);
     if ((xtal_freq_reg & 0xFFFF) == ((xtal_freq_reg >> 16) & 0xFFFF) &&
         xtal_freq_reg != 0 && xtal_freq_reg != UINT32_MAX) {
-        return xtal_freq_reg & UINT16_MAX;
+        return xtal_freq_reg & ~RTC_DISABLE_ROM_LOG & UINT16_MAX;
     }
     // If the format in reg is invalid
     return 0;
@@ -655,7 +665,7 @@ static inline __attribute__((always_inline)) uint32_t clk_ll_xtal_load_freq_mhz(
  *
  * @param cal_value The calibration value of slow clock period in microseconds, in Q13.19 fixed point format
  */
-static inline void clk_ll_rtc_slow_store_cal(uint32_t cal_value)
+static inline __attribute__((always_inline)) void clk_ll_rtc_slow_store_cal(uint32_t cal_value)
 {
     REG_WRITE(RTC_SLOW_CLK_CAL_REG, cal_value);
 }
@@ -667,7 +677,7 @@ static inline void clk_ll_rtc_slow_store_cal(uint32_t cal_value)
  *
  * @return The calibration value of slow clock period in microseconds, in Q13.19 fixed point format
  */
-static inline uint32_t clk_ll_rtc_slow_load_cal(void)
+static inline __attribute__((always_inline)) uint32_t clk_ll_rtc_slow_load_cal(void)
 {
     return REG_READ(RTC_SLOW_CLK_CAL_REG);
 }

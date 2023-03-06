@@ -270,7 +270,7 @@ static int rsn_selector_to_bitfield(const u8 *s)
 		return WPA_CIPHER_CCMP;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_WEP104)
 		return WPA_CIPHER_WEP104;
-#ifdef COFIG_GCMP
+#ifdef CONFIG_GCMP
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_GCMP)
 		return WPA_CIPHER_GCMP;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_GCMP_256)
@@ -279,7 +279,7 @@ static int rsn_selector_to_bitfield(const u8 *s)
 #ifdef CONFIG_IEEE80211W
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_AES_128_CMAC)
 		return WPA_CIPHER_AES_128_CMAC;
-#ifdef COFIG_GMAC
+#ifdef CONFIG_GMAC
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_BIP_GMAC_128)
 		return WPA_CIPHER_BIP_GMAC_128;
 	if (RSN_SELECTOR_GET(s) == RSN_CIPHER_SUITE_BIP_GMAC_256)
@@ -369,7 +369,7 @@ int wpa_parse_wpa_ie_rsnxe(const u8 *rsnxe_ie, size_t rsnxe_ie_len,
              struct wpa_ie_data *data)
 {
 	uint8_t rsnxe_capa = 0;
-	uint8_t sae_pwe = esp_wifi_sta_get_config_sae_pwe_h2e_internal();
+	uint8_t sae_pwe = esp_wifi_get_config_sae_pwe_h2e_internal(WIFI_IF_STA);
 	memset(data, 0, sizeof(*data));
 
 	if (rsnxe_ie_len < 1) {
@@ -416,10 +416,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 	}
 
 	if (rsn_ie_len < sizeof(struct rsn_ie_hdr)) {
-#ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: ie len too short %lu",
 			   __func__, (unsigned long) rsn_ie_len);
-#endif
 		return -1;
 	}
 
@@ -428,10 +426,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 	if (hdr->elem_id != WLAN_EID_RSN ||
 	    hdr->len != rsn_ie_len - 2 ||
 	    WPA_GET_LE16(hdr->version) != RSN_VERSION) {
-#ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: malformed ie or unknown version",
 			   __func__);
-#endif
 		return -2;
 	}
 
@@ -443,10 +439,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 		pos += RSN_SELECTOR_LEN;
 		left -= RSN_SELECTOR_LEN;
 	} else if (left > 0) {
-#ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: ie length mismatch, %u too much",
 			   __func__, left);
-#endif
 		return -3;
 	}
 
@@ -456,10 +450,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 		pos += 2;
 		left -= 2;
 		if (count == 0 || left < count * RSN_SELECTOR_LEN) {
-		    #ifdef DEBUG_PRINT
 			wpa_printf(MSG_DEBUG, "%s: ie count botch (pairwise), "
 				   "count %u left %u", __func__, count, left);
-		    #endif
 			return -4;
 		}
 		for (i = 0; i < count; i++) {
@@ -468,10 +460,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 			left -= RSN_SELECTOR_LEN;
 		}
 	} else if (left == 1) {
-	    #ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: ie too short (for key mgmt)",
 			   __func__);
-	    #endif
 		return -5;
 	}
 
@@ -481,10 +471,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 		pos += 2;
 		left -= 2;
 		if (count == 0 || left < count * RSN_SELECTOR_LEN) {
-		    #ifdef DEBUG_PRINT
 			wpa_printf(MSG_DEBUG, "%s: ie count botch (key mgmt), "
 				   "count %u left %u", __func__, count, left);
-		    #endif
 			return -6;
 		}
 		for (i = 0; i < count; i++) {
@@ -493,10 +481,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 			left -= RSN_SELECTOR_LEN;
 		}
 	} else if (left == 1) {
-	    #ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: ie too short (for capabilities)",
 			   __func__);
-	    #endif
 		return -7;
 	}
 
@@ -511,12 +497,10 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 		pos += 2;
 		left -= 2;
 		if (left < (int) data->num_pmkid * PMKID_LEN) {
-		    #ifdef DEBUG_PRINT
 			wpa_printf(MSG_DEBUG, "%s: PMKID underflow "
 				   "(num_pmkid=%lu left=%d)",
 				   __func__, (unsigned long) data->num_pmkid,
 				   left);
-		    #endif
 			data->num_pmkid = 0;
 			return -9;
 		} else {
@@ -540,10 +524,8 @@ int wpa_parse_wpa_ie_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 	}
 
 	if (left > 0) {
-	    #ifdef DEBUG_PRINT
 		wpa_printf(MSG_DEBUG, "%s: ie has %u trailing bytes - ignored",
 			   __func__, left);
-	    #endif
 	}
 
 	return 0;
@@ -847,6 +829,28 @@ int wpa_pmk_r1_to_ptk(const u8 *pmk_r1, const u8 *snonce, const u8 *anonce,
 
 
 /**
+* wpa_use_akm_defined - Is AKM-defined Key Descriptor Version used
+* @akmp: WPA_KEY_MGMT_* used in key derivation
+* Returns: 1 if AKM-defined Key Descriptor Version is used; 0 otherwise
+*/
+
+int wpa_use_akm_defined(int akmp){
+	int ret = 0;
+	if(wpa_key_mgmt_sae(akmp))
+		ret = 1;
+	return ret;
+}
+
+int wpa_use_aes_key_wrap(int akmp)
+{
+	return akmp == WPA_KEY_MGMT_OSEN ||
+		wpa_key_mgmt_ft(akmp) ||
+		wpa_key_mgmt_sha256(akmp) ||
+		wpa_key_mgmt_sae(akmp) ||
+		wpa_key_mgmt_suite_b(akmp);
+}
+
+/**
  * wpa_eapol_key_mic - Calculate EAPOL-Key MIC
  * @key: EAPOL-Key Key Confirmation Key (KCK)
  * @key_len: KCK length in octets
@@ -1033,7 +1037,6 @@ int rsn_pmkid_suite_b_192(const u8 *kck, size_t kck_len, const u8 *aa,
 }
 #endif /* CONFIG_SUITEB192 */
 
-#ifdef DEBUG_PRINT
 /**
  * wpa_cipher_txt - Convert cipher suite to a text string
  * @cipher: Cipher suite (WPA_CIPHER_* enum)
@@ -1066,7 +1069,6 @@ const char * wpa_cipher_txt(int cipher)
 		return "UNKNOWN";
 	}
 }
-#endif
 
 /**
  * wpa_pmk_to_ptk - Calculate PTK from PMK, addresses, and nonces

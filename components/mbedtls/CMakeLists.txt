@@ -1,14 +1,16 @@
 idf_build_get_property(idf_target IDF_TARGET)
 idf_build_get_property(python PYTHON)
 
+if(NOT ${IDF_TARGET} STREQUAL "linux")
 set(priv_requires soc esp_hw_support)
 
 if(NOT BOOTLOADER_BUILD)
     list(APPEND priv_requires esp_pm)
 endif()
+endif()
 
 set(mbedtls_srcs "")
-set(mbedtls_include_dirs "port/include" "mbedtls/include" "./mbedtls/library")
+set(mbedtls_include_dirs "port/include" "mbedtls/include" "mbedtls/library")
 
 if(CONFIG_MBEDTLS_CERTIFICATE_BUNDLE)
     list(APPEND mbedtls_srcs "esp_crt_bundle/esp_crt_bundle.c")
@@ -120,6 +122,10 @@ set(mbedtls_target_sources ${mbedtls_target_sources}
                            "${COMPONENT_DIR}/port/dynamic/esp_ssl_tls.c")
 endif()
 
+if(${IDF_TARGET} STREQUAL "linux")
+set(mbedtls_target_sources ${mbedtls_target_sources} "${COMPONENT_DIR}/port/net_sockets.c")
+endif()
+
 # net_sockets.c should only be compiled if BSD socket functions are available.
 # Do this by checking if lwip component is included into the build.
 idf_build_get_property(build_components BUILD_COMPONENTS)
@@ -180,7 +186,6 @@ endif()
 target_sources(mbedcrypto PRIVATE "${COMPONENT_DIR}/port/esp_hardware.c"
                                   "${COMPONENT_DIR}/port/esp_mem.c"
                                   "${COMPONENT_DIR}/port/esp_timing.c"
-                                  "${COMPONENT_DIR}/port/sha/esp_sha.c"
 )
 
 if(CONFIG_SOC_AES_SUPPORTED)
@@ -191,7 +196,9 @@ if(CONFIG_SOC_AES_SUPPORTED)
 endif()
 
 if(CONFIG_SOC_SHA_SUPPORTED)
-    target_sources(mbedcrypto PRIVATE "${COMPONENT_DIR}/port/sha/${SHA_PERIPHERAL_TYPE}/sha.c")
+    target_sources(mbedcrypto PRIVATE "${COMPONENT_DIR}/port/sha/esp_sha.c"
+                                    "${COMPONENT_DIR}/port/sha/${SHA_PERIPHERAL_TYPE}/sha.c"
+    )
 endif()
 
 # CONFIG_ESP_TLS_USE_DS_PERIPHERAL can be enabled only for the supported targets.
@@ -219,7 +226,7 @@ if(CONFIG_MBEDTLS_HARDWARE_SHA)
     )
 endif()
 
-if(CONFIG_MBEDTLS_HARDWARE_GCM)
+if(CONFIG_MBEDTLS_HARDWARE_GCM OR (NOT CONFIG_SOC_AES_SUPPORT_GCM AND CONFIG_MBEDTLS_HARDWARE_AES))
     target_sources(mbedcrypto PRIVATE  "${COMPONENT_DIR}/port/aes/esp_aes_gcm.c")
 endif()
 
@@ -238,6 +245,7 @@ endforeach()
 
 if(CONFIG_MBEDTLS_DYNAMIC_BUFFER)
     set(WRAP_FUNCTIONS
+        mbedtls_ssl_write_client_hello
         mbedtls_ssl_handshake_client_step
         mbedtls_ssl_handshake_server_step
         mbedtls_ssl_read
@@ -268,6 +276,5 @@ endif()
 
 # Link esp-cryptoauthlib to mbedtls
 if(CONFIG_ATCA_MBEDTLS_ECDSA)
-    idf_component_get_property(cryptoauthlib esp-cryptoauthlib COMPONENT_LIB)
-    target_link_libraries(${COMPONENT_LIB} ${linkage_type} ${cryptoauthlib})
+    idf_component_optional_requires(PRIVATE espressif__esp-cryptoauthlib esp-cryptoauthlib)
 endif()

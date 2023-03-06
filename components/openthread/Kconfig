@@ -6,10 +6,48 @@ menu "OpenThread"
         help
             Select this option to enable OpenThread and show the submenu with OpenThread configuration choices.
 
+    config OPENTHREAD_LOG_LEVEL_DYNAMIC
+        bool "Enable dynamic log level control"
+        depends on OPENTHREAD_ENABLED
+        default y
+        help
+            Select this option to enable dynamic log level control for OpenThread
+
+    choice OPENTHREAD_LOG_LEVEL
+        prompt "OpenThread log verbosity"
+        depends on OPENTHREAD_ENABLED && !OPENTHREAD_LOG_LEVEL_DYNAMIC
+        default OPENTHREAD_LOG_LEVEL_INFO
+        help
+            Select OpenThread log level.
+
+        config OPENTHREAD_LOG_LEVEL_NONE
+            bool "No logs"
+        config OPENTHREAD_LOG_LEVEL_CRIT
+            bool "Error logs"
+        config OPENTHREAD_LOG_LEVEL_WARN
+            bool "Warning logs"
+        config OPENTHREAD_LOG_LEVEL_NOTE
+            bool "Notice logs"
+        config OPENTHREAD_LOG_LEVEL_INFO
+            bool "Info logs"
+        config OPENTHREAD_LOG_LEVEL_DEBG
+            bool "Debug logs"
+    endchoice #OPENTHREAD_LOG_LEVEL
+
+    config OPENTHREAD_LOG_LEVEL
+        int
+        depends on OPENTHREAD_ENABLED && !OPENTHREAD_LOG_LEVEL_DYNAMIC
+        default 0 if OPENTHREAD_LOG_LEVEL_NONE
+        default 1 if OPENTHREAD_LOG_LEVEL_CRIT
+        default 2 if OPENTHREAD_LOG_LEVEL_WARN
+        default 3 if OPENTHREAD_LOG_LEVEL_NOTE
+        default 4 if OPENTHREAD_LOG_LEVEL_INFO
+        default 5 if OPENTHREAD_LOG_LEVEL_DEBG
+
     choice OPENTHREAD_RADIO_TYPE
         prompt "Config the Thread radio type"
         depends on OPENTHREAD_ENABLED
-        default OPENTHREAD_RADIO_NATIVE if IDF_TARGET_ESP32H2
+        default OPENTHREAD_RADIO_NATIVE if SOC_IEEE802154_SUPPORTED
         default OPENTHREAD_RADIO_SPINEL_UART
         help
             Configure how OpenThread connects to the 15.4 radio
@@ -51,6 +89,13 @@ menu "OpenThread"
                 radio only device.
     endchoice
 
+    config OPENTHREAD_CLI
+        bool "Enable Openthread Command-Line Interface"
+        depends on OPENTHREAD_ENABLED
+        default y
+        help
+            Select this option to enable Command-Line Interface in OpenThread.
+
     config OPENTHREAD_DIAG
         bool "Enable diag"
         depends on OPENTHREAD_ENABLED
@@ -80,7 +125,7 @@ menu "OpenThread"
     config OPENTHREAD_SRP_CLIENT
         bool "Enable SRP Client"
         depends on OPENTHREAD_ENABLED
-        default n
+        default y
         help
             Select this option to enable SRP Client in OpenThread. This allows a device to register SRP services to SRP
             Server.
@@ -104,5 +149,13 @@ menu "OpenThread"
         default n
         help
             Select this option to acquire NAT64 address from dns servers.
+
+    config OPENTHREAD_UART_BUFFER_SIZE
+        int "The uart received buffer size of openthread"
+        depends on OPENTHREAD_ENABLED
+        default 256
+        range 128 1024
+        help
+            Set the OpenThread UART buffer size.
 
 endmenu

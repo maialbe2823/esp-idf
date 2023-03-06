@@ -190,7 +190,15 @@ Assuming that the eFuse values are in their default states and the firmware boot
 
   5. Firmware bootloader sets the first available bit in ``{IDF_TARGET_CRYPT_CNT}`` (0b001) to mark the flash contents as encrypted. Odd number of bits is set.
 
-  6. For :ref:`flash-enc-development-mode`, the firmware bootloader allows the UART bootloader to re-flash encrypted binaries. Also, the ``{IDF_TARGET_CRYPT_CNT}`` eFuse bits are NOT write-protected. In addition, the firmware bootloader by default sets the eFuse bits ``DIS_BOOT_REMAP``, ``DIS_DOWNLOAD_ICACHE``, ``DIS_DOWNLOAD_DCACHE``, ``HARD_DIS_JTAG`` and ``DIS_LEGACY_SPI_BOOT``.
+  6. For :ref:`flash-enc-development-mode`, the firmware bootloader allows the UART bootloader to re-flash encrypted binaries. Also, the ``{IDF_TARGET_CRYPT_CNT}`` eFuse bits are NOT write-protected. In addition, the firmware bootloader by default sets the following eFuse bits:
+
+    .. list::
+
+      :esp32s2: - ``DIS_BOOT_REMAP``
+      - ``DIS_DOWNLOAD_ICACHE``
+      - ``DIS_DOWNLOAD_DCACHE``
+      - ``HARD_DIS_JTAG``
+      - ``DIS_LEGACY_SPI_BOOT``
 
   7. For :ref:`flash-enc-release-mode`, the firmware bootloader sets all the eFuse bits set under development mode as well as ``DIS_DOWNLOAD_MANUAL_ENCRYPT``. It also write-protects the ``{IDF_TARGET_CRYPT_CNT}`` eFuse bits. To modify this behavior, see :ref:`uart-bootloader-encryption`.
 
@@ -426,7 +434,7 @@ To use a host generated key, take the following steps:
 
         espefuse.py  --port PORT  burn_key BLOCK_KEY0 flash_encryption_key256.bin XTS_AES_128_KEY
 
-    For AES-128 key derived from 128 bits (SHA256(128 bits)) - ``XTS_AES_128_KEY_DERIVED_FROM_128_EFUSE_BITS``. The FE key will be written in the lower part of eFuse BLOCK_KEY0, the upper 128 bits are not used and will remain available for reading by software. Using the special mode of the espefuse tool, shown in the ``For burning both keys together`` section below, the user can write their data to it using any espefuse commands. 
+    For AES-128 key derived from 128 bits (SHA256(128 bits)) - ``XTS_AES_128_KEY_DERIVED_FROM_128_EFUSE_BITS``. The FE key will be written in the lower part of eFuse BLOCK_KEY0. The upper 128 bits are not used and will remain available for reading by software. Using the special mode of the espefuse tool, shown in the ``For burning both keys together`` section below, the user can write their data to it using any espefuse commands.
 
     .. code-block:: bash
 
@@ -544,7 +552,7 @@ When using Flash Encryption in production:
 
    - Do not reuse the same flash encryption key between multiple devices. This means that an attacker who copies encrypted data from one device cannot transfer it to a second device.
    :esp32: - When using ESP32 V3, if the UART ROM Download Mode is not needed for a production device then it should be disabled to provide an extra level of protection. Do this by calling :cpp:func:`esp_efuse_disable_rom_download_mode` during application startup. Alternatively, configure the project :ref:`CONFIG_ESP32_REV_MIN` level to 3 (targeting ESP32 V3 only) and select the :ref:`CONFIG_SECURE_UART_ROM_DL_MODE` to "Permanently disable ROM Download Mode (recommended)". The ability to disable ROM Download Mode is not available on earlier ESP32 versions.
-   :not esp32: - The UART ROM Download Mode should be disabled entirely if it is not needed, or permanently set to "Secure Download Mode" otherwise. Secure Download Mode permanently limits the available commands to basic flash read and write only. The default behaviour is to set Secure Download Mode on first boot in Release mode. To disable Download Mode entirely select select the :ref:`CONFIG_SECURE_UART_ROM_DL_MODE` to "Permanently disable ROM Download Mode (recommended)" or call :cpp:func:`esp_efuse_disable_rom_download_mode` at runtime.
+   :not esp32: - The UART ROM Download Mode should be disabled entirely if it is not needed, or permanently set to "Secure Download Mode" otherwise. Secure Download Mode permanently limits the available commands to updating SPI config, changing baud rate, basic flash write, and returning a summary of the currently enabled security features with the `get_security_info` command. The default behaviour is to set Secure Download Mode on first boot in Release mode. To disable Download Mode entirely, select :ref:`CONFIG_SECURE_UART_ROM_DL_MODE` to "Permanently disable ROM Download Mode (recommended)" or call :cpp:func:`esp_efuse_disable_rom_download_mode` at runtime.
    - Enable :doc:`Secure Boot <secure-boot-v2>` as an extra layer of protection, and to prevent an attacker from selectively corrupting any part of the flash before boot.
 
 Possible Failures
@@ -793,11 +801,11 @@ Key Points About Flash Encryption
 
   :esp32: - The flash encryption algorithm is AES-256, where the key is "tweaked" with the offset address of each 32 byte block of flash. This means that every 32-byte block (two consecutive 16 byte AES blocks) is encrypted with a unique key derived from the flash encryption key.
 
-  :esp32s2 or esp32s3: - Flash memory contents is encrypted using XTS-AES-128 or XTS-AES-256. The flash encryption key is 256 bits and 512 bits respectively and stored in one or two ``BLOCK_KEYN`` eFuses internal to the chip and, by default, is protected from software access.
+  :SOC_FLASH_ENCRYPTION_XTS_AES_256: - Flash memory contents is encrypted using XTS-AES-128 or XTS-AES-256. The flash encryption key is 256 bits and 512 bits respectively and stored in one or two ``BLOCK_KEYN`` eFuses internal to the chip and, by default, is protected from software access.
 
-  :esp32c3: - Flash memory contents is encrypted using XTS-AES-128. The flash encryption key is 256 bits and stored in one ``BLOCK_KEYN`` eFuse internal to the chip and, by default, is protected from software access.
+  :SOC_FLASH_ENCRYPTION_XTS_AES_128 and not SOC_FLASH_ENCRYPTION_XTS_AES_256 and not SOC_FLASH_ENCRYPTION_XTS_AES_128_DERIVED: - Flash memory contents is encrypted using XTS-AES-128. The flash encryption key is 256 bits and stored in one ``BLOCK_KEYN`` eFuse internal to the chip and, by default, is protected from software access.
 
-  :esp32c2: - Flash memory contents is encrypted using XTS-AES-128. The flash encryption key is 256 or 128 bits and stored in ``BLOCK_KEY0`` eFuse internal to the chip and, by default, is protected from software access.
+  :SOC_FLASH_ENCRYPTION_XTS_AES_128_DERIVED: - Flash memory contents is encrypted using XTS-AES-128. The flash encryption key is 256 or 128 bits and stored in ``BLOCK_KEY0`` eFuse internal to the chip and, by default, is protected from software access.
 
   - Flash access is transparent via the flash cache mapping feature of {IDF_TARGET_NAME} - any flash regions which are mapped to the address space will be transparently decrypted when read.
 
@@ -895,11 +903,11 @@ On the first boot, the flash encryption process burns by default the following e
   .. list::
 
     - ``DIS_DOWNLOAD_MANUAL_ENCRYPT`` which disables flash encryption operation when running in UART bootloader boot mode.
-    :esp32s2 or esp32s3: - ``DIS_DOWNLOAD_ICACHE`` and ``DIS_DOWNLOAD_DCACHE`` which disables the entire MMU flash cache when running in UART bootloader mode.
-    :esp32c3 or esp32c2: - ``DIS_DOWNLOAD_ICACHE`` which disables the entire MMU flash cache when running in UART bootloader mode.
+    :SOC_EFUSE_DIS_DOWNLOAD_ICACHE and SOC_EFUSE_DIS_DOWNLOAD_DCACHE: - ``DIS_DOWNLOAD_ICACHE`` and ``DIS_DOWNLOAD_DCACHE`` which disables the entire MMU flash cache when running in UART bootloader mode.
+    :SOC_EFUSE_DIS_DOWNLOAD_ICACHE and not SOC_EFUSE_DIS_DOWNLOAD_DCACHE: - ``DIS_DOWNLOAD_ICACHE`` which disables the entire MMU flash cache when running in UART bootloader mode.
     :esp32s2: - ``HARD_DIS_JTAG`` which disables JTAG.
-    :esp32c3: - ``DIS_PAD_JTAG`` and ``DIS_USB_JTAG`` which disables JTAG.
-    :esp32s3: - ``HARD_DIS_JTAG`` and ``DIS_USB_JTAG`` which disables JTAG.
+    :SOC_EFUSE_DIS_PAD_JTAG and SOC_EFUSE_DIS_USB_JTAG: - ``DIS_PAD_JTAG`` and ``DIS_USB_JTAG`` which disables JTAG.
+    :SOC_EFUSE_HARD_DIS_JTAG and SOC_EFUSE_DIS_USB_JTAG: - ``HARD_DIS_JTAG`` and ``DIS_USB_JTAG`` which disables JTAG.
     - ``DIS_DIRECT_BOOT`` (old name ``DIS_LEGACY_SPI_BOOT``)  which disables direct boot mode
 
 However, before the first boot you can choose to keep any of these features enabled by burning only selected eFuses and write-protect the rest of eFuses with unset value 0. For example:

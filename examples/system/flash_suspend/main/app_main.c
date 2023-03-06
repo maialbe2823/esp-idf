@@ -13,12 +13,14 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_cpu.h"
 #include "esp_partition.h"
 #include "driver/gptimer.h"
+#include "esp_flash.h"
 
 
 #define TIMER_RESOLUTION_HZ     (1 * 1000 * 1000) // 1MHz resolution
@@ -91,7 +93,7 @@ void app_main(void)
 {
     //Get the partition used for SPI1 erase operation
     const esp_partition_t *part = s_get_partition();
-    ESP_LOGI(TAG, "found partition '%s' at offset 0x%x with size 0x%x", part->label, part->address, part->size);
+    ESP_LOGI(TAG, "found partition '%s' at offset 0x%"PRIx32" with size 0x%"PRIx32, part->label, part->address, part->size);
     //Erase whole region
     ESP_ERROR_CHECK(esp_flash_erase_region(part->flash_chip, part->address, part->size));
 

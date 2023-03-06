@@ -17,18 +17,21 @@
 
 下文介绍了配置和操作定时器的常规步骤：
 
-- :ref:`resource-allocation` - 获取定时器句柄应设置的参数，以及如何在通用定时器完成工作时回收资源。
-- :ref:`set-and-get-count-value` - 如何强制定时器从起点开始计数，以及如何随时获取计数值。
-- :ref:`set-up-alarm-action` - 启动警报事件应设置的参数。
-- :ref:`register-event-callbacks` - 如何将用户的特定代码挂载到警报事件回调函数。
-- :ref:`enable-and-disable-timer` - 如何使能和禁用定时器。
-- :ref:`start-and-stop-timer` - 通过不同报警行为启动定时器的典型使用场景。
-- :ref:`power-management` - 选择不同的时钟源将会如何影响功耗。
-- :ref:`iram-safe` - 在 cache 禁用的情况下，如何更好地让定时器处理中断事务以及实现 IO 控制功能。
-- :ref:`thread-safety` - 驱动程序保证哪些 API 线程安全。
-- :ref:`kconfig-options` - 支持的 Kconfig 选项，这些选项会对驱动程序行为产生不同影响。
+.. list::
 
-.. _resource-allocation:
+    - :ref:`gptimer-resource-allocation` - 获取定时器句柄应设置的参数，以及如何在通用定时器完成工作时回收资源。
+    - :ref:`set-and-get-count-value` - 如何强制定时器从起点开始计数，以及如何随时获取计数值。
+    - :ref:`set-up-alarm-action` - 启动警报事件应设置的参数。
+    - :ref:`gptimer-register-event-callbacks` - 如何将用户的特定代码挂载到警报事件回调函数。
+    - :ref:`enable-and-disable-timer` - 如何使能和禁用定时器。
+    - :ref:`start-and-stop-timer` - 通过不同报警行为启动定时器的典型使用场景。
+    :SOC_ETM_SUPPORTED and SOC_TIMER_SUPPORT_ETM: - :ref:`gptimer-etm-event-and-task` - 定时器提供了哪些事件和任务可以连接到 ETM 通道上。
+    - :ref:`gptimer-power-management` - 选择不同的时钟源将会如何影响功耗。
+    - :ref:`gptimer-iram-safe` - 在 cache 禁用的情况下，如何更好地让定时器处理中断事务以及实现 IO 控制功能。
+    - :ref:`gptimer-thread-safety` - 驱动程序保证哪些 API 线程安全。
+    - :ref:`gptimer-kconfig-options` - 支持的 Kconfig 选项，这些选项会对驱动程序行为产生不同影响。
+
+.. _gptimer-resource-allocation:
 
 资源分配
 ^^^^^^^^^^^^^^^^^^
@@ -39,7 +42,7 @@
 
 要安装一个定时器实例，需要提前提供配置结构体 :cpp:type:`gptimer_config_t`：
 
--  :cpp:member:`gptimer_config_t::clk_src` 选择定时器的时钟源。:cpp:type:`gptimer_clock_source_t` 中列出多个可用时钟，仅可选择其中一个时钟。了解不同时钟源对功耗的影响，请查看章节 :ref:`power-management`。
+-  :cpp:member:`gptimer_config_t::clk_src` 选择定时器的时钟源。:cpp:type:`gptimer_clock_source_t` 中列出多个可用时钟，仅可选择其中一个时钟。了解不同时钟源对功耗的影响，请查看章节 :ref:`gptimer-power-management`。
 
 -  :cpp:member:`gptimer_config_t::direction` 设置定时器的计数方向，:cpp:type:`gptimer_count_direction_t` 中列出多个支持的方向，仅可选择其中一个方向。
 
@@ -94,7 +97,7 @@
 
     如果警报值已设置且定时器超过该值，则会立即触发警报。
 
-.. _register-event-callbacks:
+.. _gptimer-register-event-callbacks:
 
 注册事件回调函数
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -116,7 +119,7 @@
 
 * 此函数将把定时器驱动程序的状态从 **init** 切换为 **enable**。
 * 如果 :cpp:func:`gptimer_register_event_callbacks` 已经延迟安装中断服务，此函数将使能中断服务。
-* 如果选择了特定的时钟源（例如 APB 时钟），此函数将获取适当的电源管理锁。了解更多信息，请查看章节 :ref:`power-management`。
+* 如果选择了特定的时钟源（例如 APB 时钟），此函数将获取适当的电源管理锁。了解更多信息，请查看章节 :ref:`gptimer-power-management`。
 
 调用 :cpp:func:`gptimer_disable` 会进行相反的操作，即将定时器驱动程序恢复到 **init** 状态，禁用中断服务并释放电源管理锁。
 
@@ -256,18 +259,32 @@
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
     ESP_ERROR_CHECK(gptimer_start(gptimer, &alarm_config));
 
-.. _power-management:
+
+.. only:: SOC_ETM_SUPPORTED and SOC_TIMER_SUPPORT_ETM
+
+    .. _gptimer-etm-event-and-task:
+
+    ETM 事件与任务
+    ^^^^^^^^^^^^^^
+
+    定时器可以产生多种事件，这些事件可以连接到 :doc:`ETM </api-reference/peripherals/etm>` 模块。:cpp:type:`gptimer_etm_event_type_t` 中列出了定时器能够产生的事件类型。用户可以通过调用 :cpp:func:`gptimer_new_etm_event` 来获得相应事件的 ETM event 句柄。同样地，定时器还公开了一些可被其他事件触发然后自动执行的任务。:cpp:type:`gptimer_etm_task_type_t` 中列出了定时器能够支持的任务类型。 用户可以通过调用 :cpp:func:`gptimer_new_etm_task` 来获得相应任务的 ETM task 句柄。
+
+    关于如何将定时器事件和任务连接到 ETM 通道中，请参阅 :doc:`ETM </api-reference/peripherals/etm>` 文档。
+
+    .. _gptimer-power-management:
+
+.. only:: not SOC_ETM_SUPPORTED or not SOC_TIMER_SUPPORT_ETM
+
+    .. _gptimer-power-management:
 
 电源管理
-^^^^^^^^^^^^^^^^^
+^^^^^^^^
 
-当使能电源管理时（即 :ref:`CONFIG_PM_ENABLE` 已打开），系统将在进入 Light-sleep 模式之前调整 APB 频率，从而可能会改变通用定时器的计数步骤周期，导致计时不准确。
+有些电源管理的策略会在某些时刻关闭时钟源，或者改变时钟源的频率，以求降低功耗。比如在启用 DFS 后， APB 时钟源会降低频率。如果浅睡眠（light sleep） 模式也被开启， PLL 和 XTAL 时钟都会被默认关闭，从而导致 GPTimer 的计时不准确。
 
-然而，驱动程序可以通过获取类型为 :cpp:enumerator:`ESP_PM_APB_FREQ_MAX` 的电源管理锁来阻止系统更改 APB 频率。每当驱动程序创建一个通用定时器实例，且该实例选择 :cpp:enumerator:`GPTIMER_CLK_SRC_APB` 作为其时钟源的时，驱动程序会确保在通过 :cpp:func:`gptimer_enable` 使能定时器时，已经获取了电源管理锁。同样，当为该定时器调用 :cpp:func:`gptimer_disable` 时，驱动程序会释放电源管理锁。
+驱动程序会根据具体的时钟源选择，通过创建不同的电源锁来避免上述情况的发生。驱动会在 :cpp:func:`gptimer_enable` 函数中增加电源锁的引用计数，并在 :cpp:func:`gptimer_disable` 函数中减少电源锁的引用计数，从而保证了在 :cpp:func:`gptimer_enable` 和 :cpp:func:`gptimer_disable` 之间， GPTimer 的时钟源始处于稳定工作的状态。
 
-如果选择 :cpp:enumerator:`GPTIMER_CLK_SRC_XTAL` 等其他时钟源，那么驱动程序不会安装电源管理锁。只要时钟源仍可提供足够的分辨率，XTAL 时钟源就更适合低功耗应用。
-
-.. _iram-safe:
+.. _gptimer-iram-safe:
 
 IRAM 安全
 ^^^^^^^^^^^^^^^^^^
@@ -290,7 +307,7 @@ IRAM 安全
 - :cpp:func:`gptimer_set_raw_count`
 - :cpp:func:`gptimer_set_alarm_action`
 
-.. _thread-safety:
+.. _gptimer-thread-safety:
 
 线程安全
 ^^^^^^^^^^^^^^^^^^
@@ -307,24 +324,29 @@ IRAM 安全
 
 将 :cpp:type:`gptimer_handle_t` 作为第一个位置参数的其他函数不被视作线程安全，也就是说应该避免从多个任务中调用这些函数。
 
-.. _kconfig-options:
+.. _gptimer-kconfig-options:
 
 Kconfig 选项
 ^^^^^^^^^^^^^^^^^^^^^^
 
-- :ref:`CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM` 控制放置通用定时器控制函数（IRAM 或 flash）的位置。了解更多信息，请参考章节 :ref:`iram-safe`。
-- :ref:`CONFIG_GPTIMER_ISR_IRAM_SAFE` 控制默认 ISR 程序在 cache 禁用时是否可以运行。了解更多信息，请参考章节 :ref:`iram-safe`。
+- :ref:`CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM` 控制放置通用定时器控制函数（IRAM 或 flash）的位置。了解更多信息，请参考章节 :ref:`gptimer-iram-safe`。
+- :ref:`CONFIG_GPTIMER_ISR_IRAM_SAFE` 控制默认 ISR 程序在 cache 禁用时是否可以运行。了解更多信息，请参考章节 :ref:`gptimer-iram-safe`。
 - :ref:`CONFIG_GPTIMER_ENABLE_DEBUG_LOG` 用于启用调试日志输出。启用这一选项将增加固件二进制文件大小。
 
 应用示例
 ------------------
 
-* 示例 :example:`peripherals/timer_group/gptimer` 中列出了通用定时器的典型用例。
+.. list::
+
+    - 示例 :example:`peripherals/timer_group/gptimer` 中列出了通用定时器的典型用例。
+    :SOC_TIMER_SUPPORT_ETM: - 示例 :example:`peripherals/timer_group/gptimer_capture_hc_sr04` 展示了如何在 ETM 模块的帮助下，用定时器捕获外部事件的时间戳。
 
 API 参考
 -------------------
 
 .. include-build-file:: inc/gptimer.inc
+.. include-build-file:: inc/gptimer_etm.inc
+.. include-build-file:: inc/gptimer_types.inc
 .. include-build-file:: inc/timer_types.inc
 
 .. [1]

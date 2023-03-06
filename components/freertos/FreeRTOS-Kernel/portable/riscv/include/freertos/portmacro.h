@@ -43,7 +43,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "spinlock.h"
-#include "soc/interrupt_core0_reg.h"
+#include "soc/interrupt_reg.h"
 #include "esp_macros.h"
 #include "esp_attr.h"
 #include "esp_cpu.h"
@@ -108,6 +108,7 @@ typedef uint32_t TickType_t;
 #define portSTACK_GROWTH                (-1)
 #define portTICK_PERIOD_MS              ((TickType_t) (1000 / configTICK_RATE_HZ))
 #define portBYTE_ALIGNMENT              16
+#define portTICK_TYPE_IS_ATOMIC         1
 #define portNOP() __asm volatile        (" nop ")
 
 
@@ -398,6 +399,19 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void)
 #define portALT_GET_RUN_TIME_COUNTER_VALUE(x)    do {x = (uint32_t)esp_timer_get_time();} while(0)
 #endif
 
+// -------------- Optimized Task Selection -----------------
+
+#if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
+/* Check the configuration. */
+#if( configMAX_PRIORITIES > 32 )
+#error configUSE_PORT_OPTIMISED_TASK_SELECTION can only be set to 1 when configMAX_PRIORITIES is less than or equal to 32.  It is very rare that a system requires more than 10 to 15 different priorities as tasks that share a priority will time slice.
+#endif
+
+/* Store/clear the ready priorities in a bit map. */
+#define portRECORD_READY_PRIORITY( uxPriority, uxReadyPriorities ) ( uxReadyPriorities ) |= ( 1UL << ( uxPriority ) )
+#define portRESET_READY_PRIORITY( uxPriority, uxReadyPriorities ) ( uxReadyPriorities ) &= ~( 1UL << ( uxPriority ) )
+#define portGET_HIGHEST_PRIORITY( uxTopPriority, uxReadyPriorities ) uxTopPriority = ( 31 - __builtin_clz( ( uxReadyPriorities ) ) )
+#endif /* configUSE_PORT_OPTIMISED_TASK_SELECTION */
 
 
 /* --------------------------------------------- Inline Implementations ------------------------------------------------
@@ -461,14 +475,6 @@ extern int xPortSwitchFlag;
 #define os_task_switch_is_pended(_cpu_) (xPortSwitchFlag)
 #else
 #define os_task_switch_is_pended(_cpu_) (false)
-#endif
-
-// --------------------- Debugging -------------------------
-
-#if CONFIG_FREERTOS_ASSERT_ON_UNTESTED_FUNCTION
-#define UNTESTED_FUNCTION() do{ esp_rom_printf("Untested FreeRTOS function %s\r\n", __FUNCTION__); configASSERT(false); } while(0)
-#else
-#define UNTESTED_FUNCTION()
 #endif
 
 #ifdef __cplusplus

@@ -15,7 +15,19 @@
 #include "protocomm_priv.h"
 #include "simple_ble.h"
 
-#define CHAR_VAL_LEN_MAX         (256 + 1)
+ESP_EVENT_DEFINE_BASE(PROTOCOMM_TRANSPORT_BLE_EVENT);
+
+/* NOTE: For the security2 scheme, the payload size is quite larger
+ * than that for security1. The increased value has been selected
+ * keeping in mind the largest packet size for security2 and the
+ * factors affecting it.
+ */
+#if CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_2
+    #define CHAR_VAL_LEN_MAX         (480 + 1)
+#else
+    #define CHAR_VAL_LEN_MAX         (256 + 1)
+#endif // CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_2
+
 #define PREPARE_BUF_MAX_SIZE     CHAR_VAL_LEN_MAX
 
 static const char *TAG = "protocomm_ble";
@@ -51,6 +63,7 @@ typedef struct _protocomm_ble {
     ssize_t g_nu_lookup_count;
     uint16_t gatt_mtu;
     uint8_t *service_uuid;
+    unsigned ble_link_encryption:1;
 } _protocomm_ble_internal_t;
 
 static _protocomm_ble_internal_t *protoble_internal;
@@ -333,6 +346,10 @@ static void transport_simple_ble_disconnect(esp_gatts_cb_event_t event, esp_gatt
                 param->disconnect.conn_id);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "error closing the session after disconnect");
+        } else {
+            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_DISCONNECTED, NULL, 0, portMAX_DELAY) != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to post transport disconnection event");
+            }
         }
     }
     protoble_internal->gatt_mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
@@ -348,6 +365,10 @@ static void transport_simple_ble_connect(esp_gatts_cb_event_t event, esp_gatt_if
                 param->connect.conn_id);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "error creating the session");
+        } else {
+            if (esp_event_post(PROTOCOMM_TRANSPORT_BLE_EVENT, PROTOCOMM_TRANSPORT_BLE_CONNECTED, NULL, 0, portMAX_DELAY) != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to post transport pairing event");
+            }
         }
     }
 }
@@ -415,9 +436,9 @@ static ssize_t populate_gatt_db(esp_gatts_attr_db_t **gatt_db_generated)
         } else if (i % 3 == 2) {
             /* Characteristic Value */
             (*gatt_db_generated)[i].att_desc.perm         = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE ;
-#if CONFIG_WIFI_PROV_BLE_FORCE_ENCRYPTION
-            (*gatt_db_generated)[i].att_desc.perm        |= ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED;
-#endif
+            if (protoble_internal->ble_link_encryption) {
+                (*gatt_db_generated)[i].att_desc.perm     |= ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED;
+            }
             (*gatt_db_generated)[i].att_desc.uuid_length  = ESP_UUID_LEN_128;
             (*gatt_db_generated)[i].att_desc.uuid_p       = protoble_internal->g_nu_lookup[i / 3].uuid128;
             (*gatt_db_generated)[i].att_desc.max_length   = CHAR_VAL_LEN_MAX;
@@ -463,7 +484,7 @@ static void protocomm_ble_cleanup(void)
 
 esp_err_t protocomm_ble_start(protocomm_t *pc, const protocomm_ble_config_t *config)
 {
-    if (!pc || !config || !config->device_name || !config->nu_lookup) {
+    if (!pc || !config || !config->nu_lookup) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -518,6 +539,7 @@ esp_err_t protocomm_ble_start(protocomm_t *pc, const protocomm_ble_config_t *con
     pc->remove_endpoint = protocomm_ble_remove_endpoint;
     protoble_internal->pc_ble = pc;
     protoble_internal->gatt_mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
+    protoble_internal->ble_link_encryption = config->ble_link_encryption;
 
     // Config adv data
     adv_config.service_uuid_len = ESP_UUID_LEN_128;

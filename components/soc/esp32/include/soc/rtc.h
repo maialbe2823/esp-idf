@@ -394,6 +394,11 @@ uint32_t rtc_clk_apb_freq_get(void);
  * 32k XTAL is being calibrated, but the oscillator has not started up (due to
  * incorrect loading capacitance, board design issue, or lack of 32 XTAL on board).
  *
+ * @note When 32k CLK is being calibrated, this function will check the accuracy
+ * of the clock. Since the xtal 32k or ext osc 32k is generally very stable, if
+ * the check fails, then consider this an invalid 32k clock and return 0. This
+ * check can filter some jamming signal.
+ *
  * @param cal_clk  clock to be measured
  * @param slow_clk_cycles  number of slow clock cycles to average
  * @return average slow clock period in microseconds, Q13.19 fixed point format,
@@ -502,6 +507,7 @@ typedef struct rtc_sleep_config_s {
     uint32_t xtal_fpu : 1;              //!< keep main XTAL powered up in sleep
     uint32_t deep_slp_reject : 1;       //!< enable deep sleep reject
     uint32_t light_slp_reject : 1;      //!< enable light sleep reject
+    uint32_t dbg_atten_slp : 2;             //!< voltage parameter
 } rtc_sleep_config_t;
 
 #define RTC_SLEEP_PD_DIG                BIT(0)  //!< Deep sleep (power down digital domain)
@@ -529,12 +535,13 @@ typedef struct rtc_sleep_config_s {
 void rtc_sleep_get_default_config(uint32_t sleep_flags, rtc_sleep_config_t *out_config);
 
 /* Various delays to be programmed into power control state machines */
-#define RTC_CNTL_XTL_BUF_WAIT_SLP_US        (500)
+#define RTC_CNTL_XTL_BUF_WAIT_SLP_US        (1000)
 #define RTC_CNTL_PLL_BUF_WAIT_SLP_CYCLES    (1)
 #define RTC_CNTL_CK8M_WAIT_SLP_CYCLES       (4)
 #define RTC_CNTL_WAKEUP_DELAY_CYCLES        (7)
 #define RTC_CNTL_OTHER_BLOCKS_POWERUP_CYCLES    (1)
 #define RTC_CNTL_OTHER_BLOCKS_WAIT_CYCLES       (1)
+#define RTC_CNTL_MIN_SLP_VAL_MIN            (128)
 
 #define RTC_CNTL_CK8M_WAIT_DEFAULT          20
 #define RTC_CK8M_ENABLE_WAIT_DEFAULT        5
@@ -565,14 +572,6 @@ void rtc_sleep_init(rtc_sleep_config_t cfg);
  * @param slowclk_period re-calibrated slow clock period
  */
 void rtc_sleep_low_init(uint32_t slowclk_period);
-
-/**
- * @brief Set target value of RTC counter for RTC_TIMER_TRIG_EN wakeup source
- * @param t value of RTC counter at which wakeup from sleep will happen;
- *          only the lower 48 bits are used
- */
-void rtc_sleep_set_wakeup_time(uint64_t t);
-
 
 #define RTC_EXT0_TRIG_EN    BIT(0)  //!< EXT0 GPIO wakeup
 #define RTC_EXT1_TRIG_EN    BIT(1)  //!< EXT1 GPIO wakeup

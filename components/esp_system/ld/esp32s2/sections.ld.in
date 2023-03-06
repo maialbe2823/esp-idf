@@ -71,7 +71,7 @@ SECTIONS
 
     mapping[rtc_data]
 
-    *rtc_wake_stub*.*(.data .rodata .data.* .rodata.* .bss .bss.*)
+    *rtc_wake_stub*.*(.data .rodata .data.* .rodata.*)
     _rtc_data_end = ABSOLUTE(.);
   } > rtc_data_location
 
@@ -188,7 +188,6 @@ SECTIONS
     /* iram_end_test section exists for use by memprot unit tests only */
     *(.iram_end_test)
     _iram_text_end = ABSOLUTE(.);
-    _iram_end = ABSOLUTE(.);
   } > iram0_0_seg
 
   .dram0_reserved_for_iram (NOLOAD):
@@ -264,7 +263,7 @@ SECTIONS
 
   .flash.appdesc : ALIGN(0x10)
   {
-    _rodata_reserved_start = ABSOLUTE(.);
+    _rodata_reserved_start = ABSOLUTE(.);  /* This is a symbol marking the flash.rodata start, this can be used for mmu driver to maintain virtual address */
     _rodata_start = ABSOLUTE(.);
 
     *(.rodata_desc .rodata_desc.*)               /* Should be the first.  App version info.        DO NOT PUT ANYTHING BEFORE IT! */
@@ -336,14 +335,22 @@ SECTIONS
     *(.tbss)
     *(.tbss.*)
     _thread_local_end = ABSOLUTE(.);
-    _rodata_reserved_end = ABSOLUTE(.);
     . = ALIGN(4);
   } >default_rodata_seg
 
   _flash_rodata_align = ALIGNOF(.flash.rodata);
 
+  /*
+    This section is a place where we dump all the rodata which aren't used at runtime,
+    so as to avoid binary size increase
+  */
   .flash.rodata_noload (NOLOAD) :
   {
+    /*
+      This is a symbol marking the flash.rodata end, this can be used for mmu driver to maintain virtual address
+      We don't need to include the noload rodata in this section
+    */
+    _rodata_reserved_end = ABSOLUTE(.);
     . = ALIGN (4);
     mapping[rodata_noload]
   } > default_rodata_seg
@@ -351,7 +358,7 @@ SECTIONS
   .flash.text :
   {
     _stext = .;
-    _instruction_reserved_start = ABSOLUTE(.);
+    _instruction_reserved_start = ABSOLUTE(.);  /* This is a symbol marking the flash.text start, this can be used for mmu driver to maintain virtual address */
     _text_start = ABSOLUTE(.);
 
     mapping[flash_text]
@@ -370,7 +377,7 @@ SECTIONS
     . += _esp_flash_mmap_prefetch_pad_size;
 
     _text_end = ABSOLUTE(.);
-    _instruction_reserved_end = ABSOLUTE(.);
+    _instruction_reserved_end = ABSOLUTE(.);  /* This is a symbol marking the flash.text end, this can be used for mmu driver to maintain virtual address */
     _etext = .;
 
     /* Similar to _iram_start, this symbol goes here so it is

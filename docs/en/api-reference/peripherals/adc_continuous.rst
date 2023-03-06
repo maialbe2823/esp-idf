@@ -1,13 +1,14 @@
 Analog to Digital Converter (ADC) Continuous Mode Driver
 ========================================================
 
+{IDF_TARGET_ADC_NUM:default="two", esp32c2="one", esp32c6="one", esp32h4="one"}
 
 Introduction
 ------------
 
 The Analog to Digital Converter is an on-chip sensor which is able to measure analog signals from specific analog IO pads.
 
-The ADC on {IDF_TARGET_NAME} can be used in scenario(s) like:
+{IDF_TARGET_NAME} has {IDF_TARGET_ADC_NUM} ADC unit(s), which can be used in scenario(s) like:
 
 - Generate one-shot ADC conversion result
 - Generate continuous ADC conversion results
@@ -18,6 +19,7 @@ Driver Concepts
 ^^^^^^^^^^^^^^^
 
 ADC continuous mode conversion is made up with multiple Conversion Frames.
+
 - Conversion Frame: One Conversion Frame contains multiple Conversion Results. Conversion Frame size is configured in :cpp:func:`adc_continuous_new_handle`, in bytes.
 - Conversion Result: One Conversion Result contains multiple bytes (see :c:macro:`SOC_ADC_DIGI_RESULT_BYTES`). Its structure is :cpp:type:`adc_digi_output_data_t`, including ADC unit, ADC channel and raw data.
 
@@ -69,6 +71,26 @@ After setting up above configurations for the ADC, call :cpp:func:`adc_continuou
 If the ADC continuous mode driver is no longer used, you should deinitialize the driver by calling :cpp:func:`adc_continuous_deinit`.
 
 
+.. only:: SOC_ADC_DIG_IIR_FILTER_SUPPORTED
+
+    Two IIR filters are available when ADC is working under continuous mode. To create an ADC IIR filter, you should set up the :cpp:type:`adc_continuous_iir_filter_config_t`, and call :cpp:func:`adc_new_continuous_iir_filter`.
+
+    - :cpp:member:`adc_digi_filter_config_t::unit`, ADC  unit.
+    - :cpp:member:`adc_digi_filter_config_t::channel`, ADC channel to be filtered.
+    - :cpp:member:`adc_digi_filter_config_t::coeff`, filter coefficient.
+
+    .. only:: SOC_ADC_DIG_IIR_FILTER_UNIT_BINDED
+
+            On ESP32S2, the filter is per ADC unit. Once a filter is enabled, all the enabled ADC channels in this ADC unit will be filtered. However, we suggest only enabling one ADC channel per unit, when using the filter feature. Because the filtered results depend on the previous filtered result. So you should not enable multiple ADC channels, to avoid mixing the filtered results.
+
+    To recycle a filter, you should call :cpp:func:`adc_del_continuous_iir_filter`.
+
+    .. only:: not SOC_ADC_DIG_IIR_FILTER_UNIT_BINDED
+
+        .. note::
+
+            If you use both the filters on a same ADC channel, then only the first one will take effect.
+
 Initialize the ADC Continuous Mode Driver
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -117,6 +139,10 @@ This API may fail due to reasons like :c:macro:`ESP_ERR_INVALID_ARG`. When it re
 
 See ADC continuous mode example :example:`peripherals/adc/continuous_read` to see configuration codes.
 
+
+.. only:: SOC_ADC_DIG_IIR_FILTER_SUPPORTED
+
+    To enable / disable the ADC IIR filter, you should call :cpp:func:`adc_continuous_iir_filter_enable` / :cpp:func:`adc_continuous_iir_filter_disable`.
 
 ADC Control
 ^^^^^^^^^^^
@@ -199,15 +225,16 @@ Dmax    Maximum of the output ADC raw digital reading result, which is 2^bitwidt
 
 To do further calbration to convert the ADC raw result to voltage in mV, please refer to calibration doc :doc:`adc_calibration`.
 
+.. _hardware_limitations_adc_continuous:
 
 Hardware Limitations
 ^^^^^^^^^^^^^^^^^^^^
 
-- A specific ADC unit can only work under one operating mode at any one time, either Continuous Mode or Oneshot Mode. :cpp:func:`adc_continuous_start` has provided the protection.
+- A specific ADC unit can only work under one operating mode at any one time, either continuous mode or oneshot mode. :cpp:func:`adc_continuous_start` has provided the protection.
 
 - Random Number Generator uses ADC as an input source. When ADC continuous mode driver works, the random number generated from RNG will be less random.
 
-.. only:: esp32s2 or esp32c3 or esp32s3
+.. only:: esp32 or esp32s2
 
     - ADC2 is also used by the Wi-Fi. :cpp:func:`adc_continuous_start` has provided the protection between Wi-Fi driver and ADC continuous mode driver.
 
@@ -222,6 +249,14 @@ Hardware Limitations
 .. only:: esp32s2
 
     - ADC continuous mode driver uses SPI3 peripheral as hardware DMA fifo. Therefore, if SPI3 is in use already, the :cpp:func:`adc_continuous_new_handle` will return :c:macro:`ESP_ERR_NOT_FOUND`.
+
+.. only:: esp32c3
+
+    - ADC2 continuous mode is no longer supported, due to hardware limitation. The results are not stable. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
+
+.. only:: esp32s3
+
+    - ADC2 continuous mode is no longer supported, due to hardware limitation. The results are not stable. This issue can be found in `ESP32S3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-s3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3` to force use ADC2.
 
 
 Power Management

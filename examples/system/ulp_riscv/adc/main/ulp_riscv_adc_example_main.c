@@ -13,9 +13,10 @@
 */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include "esp_sleep.h"
 #include "ulp_riscv.h"
-#include "ulp_riscv_adc.h"
+#include "ulp_adc.h"
 #include "ulp_main.h"
 #include "ulp/example_config.h"
 
@@ -39,8 +40,8 @@ void app_main(void)
     /* ULP Risc-V read and detected a temperature above the limit */
     if (cause == ESP_SLEEP_WAKEUP_ULP) {
         printf("ULP-RISC-V woke up the main CPU\n");
-        printf("Threshold: high = %d\n", ulp_adc_threshold);
-        printf("Value = %d was above threshold\n", ulp_wakeup_result);
+        printf("Threshold: high = %"PRIu32"\n", ulp_adc_threshold);
+        printf("Value = %"PRIu32" was above threshold\n", ulp_wakeup_result);
     }
 
     /* Go back to sleep, only the ULP Risc-V will run */
@@ -56,14 +57,15 @@ void app_main(void)
 
 static void init_ulp_program(void)
 {
-    ulp_riscv_adc_cfg_t cfg = {
-        .adc_n   = EXAMPLE_ADC_UNIT,
-        .channel = EXAMPLE_ADC_CHANNEL,
-        .width   = EXAMPLE_ADC_WIDTH,
-        .atten   = EXAMPLE_ADC_ATTEN,
+    ulp_adc_cfg_t cfg = {
+        .adc_n    = EXAMPLE_ADC_UNIT,
+        .channel  = EXAMPLE_ADC_CHANNEL,
+        .width    = EXAMPLE_ADC_WIDTH,
+        .atten    = EXAMPLE_ADC_ATTEN,
+        .ulp_mode = ADC_ULP_MODE_RISCV,
     };
 
-    ESP_ERROR_CHECK(ulp_riscv_adc_init(&cfg));
+    ESP_ERROR_CHECK(ulp_adc_init(&cfg));
 
     esp_err_t err = ulp_riscv_load_binary(ulp_main_bin_start, (ulp_main_bin_end - ulp_main_bin_start));
     ESP_ERROR_CHECK(err);

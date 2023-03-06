@@ -22,6 +22,10 @@
 #include "hal/gpio_hal.h"
 #include "esp_rom_gpio.h"
 
+#if (SOC_RTCIO_PIN_COUNT > 0)
+#include "hal/rtc_io_hal.h"
+#endif
+
 static const char *GPIO_TAG = "gpio";
 #define GPIO_CHECK(a, str, ret_val) ESP_RETURN_ON_FALSE(a, ret_val, GPIO_TAG, "%s", str)
 
@@ -53,6 +57,7 @@ typedef struct {
     uint32_t isr_core_id;
     gpio_isr_func_t *gpio_isr_func;
     gpio_isr_handle_t gpio_isr_handle;
+    uint64_t isr_clr_on_entry_mask; // for edge-triggered interrupts, interrupt status bits should be cleared before entering per-pin handlers
 } gpio_context_t;
 
 static gpio_hal_context_t _gpio_hal = {
@@ -64,6 +69,7 @@ static gpio_context_t gpio_context = {
     .gpio_spinlock = portMUX_INITIALIZER_UNLOCKED,
     .isr_core_id = GPIO_ISR_CORE_ID_UNINIT,
     .gpio_isr_func = NULL,
+    .isr_clr_on_entry_mask = 0,
 };
 
 esp_err_t gpio_pullup_en(gpio_num_t gpio_num)
@@ -149,13 +155,17 @@ esp_err_t gpio_set_intr_type(gpio_num_t gpio_num, gpio_int_type_t intr_type)
 
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_set_intr_type(gpio_context.gpio_hal, gpio_num, intr_type);
+    if (intr_type == GPIO_INTR_POSEDGE || intr_type == GPIO_INTR_NEGEDGE || intr_type == GPIO_INTR_ANYEDGE) {
+        gpio_context.isr_clr_on_entry_mask |= (1ULL << (gpio_num));
+    } else {
+        gpio_context.isr_clr_on_entry_mask &= ~(1ULL << (gpio_num));
+    }
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
     return ESP_OK;
 }
 
 static esp_err_t gpio_intr_enable_on_core(gpio_num_t gpio_num, uint32_t core_id)
 {
-    GPIO_CHECK(GPIO_IS_VALID_GPIO(gpio_num), "GPIO number error", ESP_ERR_INVALID_ARG);
     gpio_hal_intr_enable_on_core(gpio_context.gpio_hal, gpio_num, core_id);
     return ESP_OK;
 }
@@ -232,6 +242,26 @@ int gpio_get_level(gpio_num_t gpio_num)
 {
     return gpio_hal_get_level(gpio_context.gpio_hal, gpio_num);
 }
+
+#if SOC_GPIO_SUPPORT_PIN_HYS_FILTER
+static esp_err_t gpio_hysteresis_enable(gpio_num_t gpio_num)
+{
+    gpio_hal_hysteresis_soft_enable(gpio_context.gpio_hal, gpio_num, true);
+    return ESP_OK;
+}
+
+static esp_err_t gpio_hysteresis_disable(gpio_num_t gpio_num)
+{
+    gpio_hal_hysteresis_soft_enable(gpio_context.gpio_hal, gpio_num, false);
+    return ESP_OK;
+}
+
+static esp_err_t gpio_hysteresis_by_efuse(gpio_num_t gpio_num)
+{
+    gpio_hal_hysteresis_from_efuse(gpio_context.gpio_hal, gpio_num);
+    return ESP_OK;
+}
+#endif  //SOC_GPIO_SUPPORT_PIN_HYS_FILTER
 
 esp_err_t gpio_set_pull_mode(gpio_num_t gpio_num, gpio_pull_mode_t pull)
 {
@@ -380,6 +410,15 @@ esp_err_t gpio_config(const gpio_config_t *pGPIOConfig)
                 gpio_intr_disable(io_num);
             }
 
+#if SOC_GPIO_SUPPORT_PIN_HYS_FILTER
+            if (pGPIOConfig->hys_ctrl_mode == GPIO_HYS_SOFT_ENABLE) {
+                gpio_hysteresis_enable(io_num);
+            } else if (pGPIOConfig->hys_ctrl_mode == GPIO_HYS_SOFT_DISABLE) {
+                gpio_hysteresis_disable(io_num);
+            } else {
+                gpio_hysteresis_by_efuse(io_num);
+            }
+#endif  //SOC_GPIO_SUPPORT_PIN_HYS_FILTER
             /* By default, all the pins have to be configured as GPIO pins. */
             gpio_hal_iomux_func_sel(io_reg, PIN_FUNC_GPIO);
         }
@@ -412,8 +451,20 @@ static inline void IRAM_ATTR gpio_isr_loop(uint32_t status, const uint32_t gpio_
         status &= ~(1 << nbit);
         int gpio_num = gpio_num_start + nbit;
 
+        bool intr_status_bit_cleared = false;
+        // Edge-triggered type interrupt can clear the interrupt status bit before entering per-pin interrupt handler
+        if ((1ULL << (gpio_num)) & gpio_context.isr_clr_on_entry_mask) {
+            intr_status_bit_cleared = true;
+            gpio_hal_clear_intr_status_bit(gpio_context.gpio_hal, gpio_num);
+        }
+
         if (gpio_context.gpio_isr_func[gpio_num].fn != NULL) {
             gpio_context.gpio_isr_func[gpio_num].fn(gpio_context.gpio_isr_func[gpio_num].args);
+        }
+
+        // If the interrupt status bit was not cleared at the entry, then must clear it before exiting
+        if (!intr_status_bit_cleared) {
+            gpio_hal_clear_intr_status_bit(gpio_context.gpio_hal, gpio_num);
         }
     }
 }
@@ -431,7 +482,6 @@ static void IRAM_ATTR gpio_intr_service(void *arg)
 
     if (gpio_intr_status) {
         gpio_isr_loop(gpio_intr_status, 0);
-        gpio_hal_clear_intr_status(gpio_context.gpio_hal, gpio_intr_status);
     }
 
     //read status1 to get interrupt status for GPIO32-39
@@ -440,21 +490,30 @@ static void IRAM_ATTR gpio_intr_service(void *arg)
 
     if (gpio_intr_status_h) {
         gpio_isr_loop(gpio_intr_status_h, 32);
-        gpio_hal_clear_intr_status_high(gpio_context.gpio_hal, gpio_intr_status_h);
     }
 }
 
 esp_err_t gpio_install_isr_service(int intr_alloc_flags)
 {
     GPIO_CHECK(gpio_context.gpio_isr_func == NULL, "GPIO isr service already installed", ESP_ERR_INVALID_STATE);
-    esp_err_t ret;
-    portENTER_CRITICAL(&gpio_context.gpio_spinlock);
-    gpio_context.gpio_isr_func = (gpio_isr_func_t *) calloc(GPIO_NUM_MAX, sizeof(gpio_isr_func_t));
-    portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
-    if (gpio_context.gpio_isr_func == NULL) {
-        ret = ESP_ERR_NO_MEM;
-    } else {
-        ret = gpio_isr_register(gpio_intr_service, NULL, intr_alloc_flags, &gpio_context.gpio_isr_handle);
+    esp_err_t ret = ESP_ERR_NO_MEM;
+    gpio_isr_func_t *isr_func = (gpio_isr_func_t *) calloc(GPIO_NUM_MAX, sizeof(gpio_isr_func_t));
+    if (isr_func) {
+        portENTER_CRITICAL(&gpio_context.gpio_spinlock);
+        if (gpio_context.gpio_isr_func == NULL) {
+            gpio_context.gpio_isr_func = isr_func;
+            portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
+            ret = gpio_isr_register(gpio_intr_service, NULL, intr_alloc_flags, &gpio_context.gpio_isr_handle);
+            if (ret != ESP_OK) {
+                // registering failed, uninstall isr service
+                gpio_uninstall_isr_service();
+            }
+        } else {
+            // isr service already installed, free allocated resource
+            portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
+            ret = ESP_ERR_INVALID_STATE;
+            free(isr_func);
+        }
     }
 
     return ret;
@@ -563,7 +622,7 @@ esp_err_t gpio_wakeup_enable(gpio_num_t gpio_num, gpio_int_type_t intr_type)
         portENTER_CRITICAL(&gpio_context.gpio_spinlock);
         gpio_hal_set_intr_type(gpio_context.gpio_hal, gpio_num, intr_type);
         gpio_hal_wakeup_enable(gpio_context.gpio_hal, gpio_num);
-#if SOC_GPIO_SUPPORT_SLP_SWITCH && CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND
+#if CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND || CONFIG_PM_SLP_DISABLE_GPIO
         gpio_hal_sleep_sel_dis(gpio_context.gpio_hal, gpio_num);
 #endif
         portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
@@ -586,7 +645,7 @@ esp_err_t gpio_wakeup_disable(gpio_num_t gpio_num)
 #endif
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_wakeup_disable(gpio_context.gpio_hal, gpio_num);
-#if SOC_GPIO_SUPPORT_SLP_SWITCH && CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND
+#if CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND || CONFIG_PM_SLP_DISABLE_GPIO
     gpio_hal_sleep_sel_en(gpio_context.gpio_hal, gpio_num);
 #endif
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
@@ -675,6 +734,7 @@ esp_err_t gpio_hold_dis(gpio_num_t gpio_num)
     return ret;
 }
 
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 void gpio_deep_sleep_hold_en(void)
 {
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
@@ -688,13 +748,13 @@ void gpio_deep_sleep_hold_dis(void)
     gpio_hal_deep_sleep_hold_dis(gpio_context.gpio_hal);
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
 }
+#endif //!SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 
 #if SOC_GPIO_SUPPORT_FORCE_HOLD
-
-esp_err_t gpio_force_hold_all()
+esp_err_t IRAM_ATTR gpio_force_hold_all()
 {
 #if SOC_RTCIO_HOLD_SUPPORTED
-    rtc_gpio_force_hold_all();
+    rtc_gpio_force_hold_en_all();
 #endif
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_force_hold_all();
@@ -702,17 +762,17 @@ esp_err_t gpio_force_hold_all()
     return ESP_OK;
 }
 
-esp_err_t gpio_force_unhold_all()
+esp_err_t IRAM_ATTR gpio_force_unhold_all()
 {
-#if SOC_RTCIO_HOLD_SUPPORTED
-    rtc_gpio_force_hold_dis_all();
-#endif
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_force_unhold_all();
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
+#if SOC_RTCIO_HOLD_SUPPORTED
+    rtc_gpio_force_hold_dis_all();
+#endif
     return ESP_OK;
 }
-#endif
+#endif //SOC_GPIO_SUPPORT_FORCE_HOLD
 
 void gpio_iomux_in(uint32_t gpio, uint32_t signal_idx)
 {
@@ -724,7 +784,6 @@ void gpio_iomux_out(uint8_t gpio_num, int func, bool oen_inv)
     gpio_hal_iomux_out(gpio_context.gpio_hal, gpio_num, func, (uint32_t)oen_inv);
 }
 
-#if SOC_GPIO_SUPPORT_SLP_SWITCH
 static esp_err_t gpio_sleep_pullup_en(gpio_num_t gpio_num)
 {
     GPIO_CHECK(GPIO_IS_VALID_GPIO(gpio_num), "GPIO number error", ESP_ERR_INVALID_ARG);
@@ -896,12 +955,11 @@ esp_err_t gpio_sleep_pupd_config_unapply(gpio_num_t gpio_num)
     return ESP_OK;
 }
 #endif // CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
-#endif // SOC_GPIO_SUPPORT_SLP_SWITCH
 
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 esp_err_t gpio_deep_sleep_wakeup_enable(gpio_num_t gpio_num, gpio_int_type_t intr_type)
 {
-    if (!gpio_hal_is_valid_deepsleep_wakeup_gpio(gpio_num)) {
+    if (!GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(gpio_num)) {
         ESP_LOGE(GPIO_TAG, "GPIO %d does not support deep sleep wakeup", gpio_num);
         return ESP_ERR_INVALID_ARG;
     }
@@ -911,7 +969,7 @@ esp_err_t gpio_deep_sleep_wakeup_enable(gpio_num_t gpio_num, gpio_int_type_t int
     }
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_deepsleep_wakeup_enable(gpio_context.gpio_hal, gpio_num, intr_type);
-#if SOC_GPIO_SUPPORT_SLP_SWITCH && CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND
+#if CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND || CONFIG_PM_SLP_DISABLE_GPIO
     gpio_hal_sleep_sel_dis(gpio_context.gpio_hal, gpio_num);
 #endif
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);
@@ -920,13 +978,13 @@ esp_err_t gpio_deep_sleep_wakeup_enable(gpio_num_t gpio_num, gpio_int_type_t int
 
 esp_err_t gpio_deep_sleep_wakeup_disable(gpio_num_t gpio_num)
 {
-    if (!gpio_hal_is_valid_deepsleep_wakeup_gpio(gpio_num)) {
+    if (!GPIO_IS_DEEP_SLEEP_WAKEUP_VALID_GPIO(gpio_num)) {
         ESP_LOGE(GPIO_TAG, "GPIO %d does not support deep sleep wakeup", gpio_num);
         return ESP_ERR_INVALID_ARG;
     }
     portENTER_CRITICAL(&gpio_context.gpio_spinlock);
     gpio_hal_deepsleep_wakeup_disable(gpio_context.gpio_hal, gpio_num);
-#if SOC_GPIO_SUPPORT_SLP_SWITCH && CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND
+#if CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND || CONFIG_PM_SLP_DISABLE_GPIO
     gpio_hal_sleep_sel_en(gpio_context.gpio_hal, gpio_num);
 #endif
     portEXIT_CRITICAL(&gpio_context.gpio_spinlock);

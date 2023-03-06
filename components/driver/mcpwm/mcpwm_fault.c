@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -71,7 +71,7 @@ static void mcpwm_gpio_fault_unregister_from_group(mcpwm_gpio_fault_t *fault)
     mcpwm_release_group_handle(group);
 }
 
-static esp_err_t mcpwm_gpio_fault_destory(mcpwm_gpio_fault_t *fault)
+static esp_err_t mcpwm_gpio_fault_destroy(mcpwm_gpio_fault_t *fault)
 {
     if (fault->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(fault->intr), TAG, "uninstall interrupt service failed");
@@ -133,7 +133,7 @@ esp_err_t mcpwm_new_gpio_fault(const mcpwm_gpio_fault_config_t *config, mcpwm_fa
 
 err:
     if (fault) {
-        mcpwm_gpio_fault_destory(fault);
+        mcpwm_gpio_fault_destroy(fault);
     }
     return ret;
 }
@@ -157,7 +157,7 @@ static esp_err_t mcpwm_del_gpio_fault(mcpwm_fault_handle_t fault)
     mcpwm_ll_fault_enable_detection(hal->dev, fault_id, false);
 
     // recycle memory resource
-    ESP_RETURN_ON_ERROR(mcpwm_gpio_fault_destory(gpio_fault), TAG, "destory GPIO fault failed");
+    ESP_RETURN_ON_ERROR(mcpwm_gpio_fault_destroy(gpio_fault), TAG, "destroy GPIO fault failed");
     return ESP_OK;
 }
 
@@ -196,18 +196,18 @@ esp_err_t mcpwm_soft_fault_activate(mcpwm_fault_handle_t fault)
     ESP_RETURN_ON_FALSE(fault->type == MCPWM_FAULT_TYPE_SOFT, ESP_ERR_INVALID_ARG, TAG, "not a valid soft fault");
     mcpwm_group_t *group = fault->group;
     mcpwm_soft_fault_t *soft_fault = __containerof(fault, mcpwm_soft_fault_t, base);
-    mcpwm_oper_t *operator = soft_fault->operator;
-    ESP_RETURN_ON_FALSE(operator, ESP_ERR_INVALID_STATE, TAG, "no operator is assigned to the fault");
+    mcpwm_oper_t *oper = soft_fault->oper;
+    ESP_RETURN_ON_FALSE(oper, ESP_ERR_INVALID_STATE, TAG, "no operator is assigned to the fault");
 
-    switch (operator->brake_mode_on_soft_fault) {
+    switch (oper->brake_mode_on_soft_fault) {
     case MCPWM_OPER_BRAKE_MODE_CBC:
-        mcpwm_ll_brake_trigger_soft_cbc(group->hal.dev, operator->oper_id);
+        mcpwm_ll_brake_trigger_soft_cbc(group->hal.dev, oper->oper_id);
         break;
     case MCPWM_OPER_BRAKE_MODE_OST:
-        mcpwm_ll_brake_trigger_soft_ost(group->hal.dev, operator->oper_id);
+        mcpwm_ll_brake_trigger_soft_ost(group->hal.dev, oper->oper_id);
         break;
     default:
-        ESP_RETURN_ON_FALSE(false, ESP_ERR_INVALID_STATE, TAG, "unknown brake mode:%d", operator->brake_mode_on_soft_fault);
+        ESP_RETURN_ON_FALSE(false, ESP_ERR_INVALID_STATE, TAG, "unknown brake mode:%d", oper->brake_mode_on_soft_fault);
         break;
     }
     return ESP_OK;
@@ -229,7 +229,7 @@ esp_err_t mcpwm_fault_register_event_callbacks(mcpwm_fault_handle_t fault, const
     mcpwm_hal_context_t *hal = &group->hal;
     int fault_id = gpio_fault->fault_id;
 
-#if CONFIG_MCWPM_ISR_IRAM_SAFE
+#if CONFIG_MCPWM_ISR_IRAM_SAFE
     if (cbs->on_fault_enter) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_fault_enter), ESP_ERR_INVALID_ARG, TAG, "on_fault_enter callback not in IRAM");
     }
@@ -243,7 +243,7 @@ esp_err_t mcpwm_fault_register_event_callbacks(mcpwm_fault_handle_t fault, const
 
     // lazy install interrupt service
     if (!gpio_fault->intr) {
-        // we want the interrupt servie to be enabled after allocation successfully
+        // we want the interrupt service to be enabled after allocation successfully
         int isr_flags = MCPWM_INTR_ALLOC_FLAG & ~ESP_INTR_FLAG_INTRDISABLED;
         ESP_RETURN_ON_ERROR(esp_intr_alloc_intrstatus(mcpwm_periph_signals.groups[group_id].irq_id, isr_flags,
                             (uint32_t)mcpwm_ll_intr_get_status_reg(hal->dev), MCPWM_LL_EVENT_FAULT_MASK(fault_id),
@@ -274,7 +274,7 @@ static void IRAM_ATTR mcpwm_gpio_fault_default_isr(void *args)
     mcpwm_ll_intr_clear_status(hal->dev, status & MCPWM_LL_EVENT_FAULT_MASK(fault_id));
 
     mcpwm_fault_event_data_t edata = {
-        // TODO
+        // TBD
     };
 
     if (status & MCPWM_LL_EVENT_FAULT_ENTER(fault_id)) {

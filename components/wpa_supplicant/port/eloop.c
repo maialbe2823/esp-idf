@@ -16,6 +16,7 @@
 #include "common.h"
 #include "list.h"
 #include "eloop.h"
+#include "esp_wifi_driver.h"
 
 struct eloop_timeout {
 	struct dl_list list;
@@ -42,12 +43,29 @@ static void *eloop_data_lock = NULL;
 
 static struct eloop_data eloop;
 
+static int eloop_run_wrapper(void *data)
+{
+	eloop_run();
+	return 0;
+}
+
+static void eloop_run_timer(void)
+{
+	/* Execute timers in pptask context to make it thread safe */
+	wifi_ipc_config_t cfg;
+
+	cfg.fn = eloop_run_wrapper;
+	cfg.arg = NULL;
+	cfg.arg_size = 0;
+	esp_wifi_ipc_internal(&cfg, false);
+}
+
 int eloop_init(void)
 {
 	os_memset(&eloop, 0, sizeof(eloop));
 	dl_list_init(&eloop.timeout);
 	os_timer_disarm(&eloop.eloop_timer);
-	os_timer_setfn(&eloop.eloop_timer, (ETSTimerFunc *)eloop_run, NULL);
+	os_timer_setfn(&eloop.eloop_timer, (ETSTimerFunc *)eloop_run_timer, NULL);
 
 	eloop_data_lock = os_recursive_mutex_create();
 
@@ -140,15 +158,30 @@ overflow:
 	return 0;
 }
 
+static bool timeout_exists(struct eloop_timeout *old)
+{
+	struct eloop_timeout *timeout, *prev;
+	dl_list_for_each_safe(timeout, prev, &eloop.timeout,
+			      struct eloop_timeout, list) {
+		if (old == timeout)
+			return true;
+	}
+
+	return false;
+}
 
 static void eloop_remove_timeout(struct eloop_timeout *timeout)
 {
+	bool timeout_present = false;
 	ELOOP_LOCK();
-	dl_list_del(&timeout->list);
+	/* Make sure timeout still exists(Another context may have deleted this) */
+	timeout_present = timeout_exists(timeout);
+	if (timeout_present)
+		dl_list_del(&timeout->list);
 	ELOOP_UNLOCK();
-	os_free(timeout);
+	if (timeout_present)
+		os_free(timeout);
 }
-
 
 #ifdef ELOOP_DEBUG
 int eloop_cancel_timeout_debug(eloop_timeout_handler handler, void *eloop_data,
@@ -366,5 +399,6 @@ void eloop_destroy(void)
 		eloop_data_lock = NULL;
 	}
 	os_timer_disarm(&eloop.eloop_timer);
+	os_timer_done(&eloop.eloop_timer);
 	os_memset(&eloop, 0, sizeof(eloop));
 }

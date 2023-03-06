@@ -664,6 +664,18 @@ int crypto_bignum_mulmod(const struct crypto_bignum *a,
 int crypto_bignum_sqrmod(const struct crypto_bignum *a,
 			  const struct crypto_bignum *b,
 			  struct crypto_bignum *c);
+
+/**
+ * crypto_bignum_sqrtmod - returns sqrt(a) (mod b)
+ * @a: Bignum
+ * @b: Bignum
+ * @c: Bignum; used to store the result
+ * Returns: 0 on success, -1 on failure
+ */
+int crypto_bignum_sqrtmod(const struct crypto_bignum *a,
+			  const struct crypto_bignum *b,
+			  struct crypto_bignum *c);
+
 /**
  * crypto_bignum_rshift - r = a >> n
  * @a: Bignum
@@ -703,6 +715,13 @@ int crypto_bignum_is_zero(const struct crypto_bignum *a);
  * Returns: 1 if @a is one or 0 if not
  */
 int crypto_bignum_is_one(const struct crypto_bignum *a);
+
+/**
+ * crypto_bignum_is_odd - Is the given bignum odd
+ * @a: Bignum
+ * Returns: 1 if @a is odd or 0 if not
+ */
+int crypto_bignum_is_odd(const struct crypto_bignum *a);
 
 /**
  * crypto_bignum_legendre - Compute the Legendre symbol (a/p)
@@ -1127,5 +1146,43 @@ struct crypto_ecdh * crypto_ecdh_init(int group);
 struct wpabuf * crypto_ecdh_get_pubkey(struct crypto_ecdh *ecdh,int y);
 struct wpabuf * crypto_ecdh_set_peerkey(struct crypto_ecdh *ecdh, int inc_y,
                                         const u8 *key, size_t len);
+
+
+struct crypto_ec_key;
+
+
+/**
+ * crypto_ec_key_parse_pub - Initialize EC key pair from SubjectPublicKeyInfo ASN.1
+ * @der: DER encoding of ASN.1 SubjectPublicKeyInfo
+ * @der_len: Length of @der buffer
+ * Returns: EC key or %NULL on failure
+ */
+struct crypto_ec_key * crypto_ec_key_parse_pub(const u8 *der, size_t der_len);
+
+
+/**
+ * crypto_ec_key_group - Get IANA group identifier for an EC key
+ * @key: EC key from crypto_ec_key_parse/set_pub/priv() or crypto_ec_key_gen()
+ * Returns: IANA group identifier and -1 on failure
+ */
+int crypto_ec_key_group(struct crypto_ec_key *key);
+
+/**
+ * crypto_ec_key_deinit - Free EC key
+ * @key: EC key from crypto_ec_key_parse_pub/priv() or crypto_ec_key_gen()
+ */
+void crypto_ec_key_deinit(struct crypto_ec_key *key);
+
+/**
+ * crypto_ec_key_verify_signature - Verify ECDSA signature
+ * @key: EC key from crypto_ec_key_parse/set_pub() or crypto_ec_key_gen()
+ * @data: Data to be signed
+ * @len: Length of @data buffer
+ * @sig: DER encoding of ASN.1 Ecdsa-Sig-Value
+ * @sig_len: Length of @sig buffer
+ * Returns: 1 if signature is valid, 0 if signature is invalid and -1 on failure
+ */
+int crypto_ec_key_verify_signature(struct crypto_ec_key *key, const u8 *data,
+                                   size_t len, const u8 *sig, size_t sig_len);
 
 #endif /* CRYPTO_H */

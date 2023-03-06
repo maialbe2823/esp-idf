@@ -16,6 +16,9 @@ To optimize both firmware binary size and memory usage it's necessary to measure
 
 Using the :ref:`idf.py` sub-commands ``size``, ``size-components`` and ``size-files`` provides a summary of memory used by the project:
 
+.. note::
+    It is possible to add ``-DOUTPUT_FORMAT=csv`` or ``-DOUTPUT_FORMAT=json`` to get the output in CSV or JSON format.
+
 Size Summary (idf.py size)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -188,9 +191,9 @@ Comparing Two Binaries
 
 If making some changes that affect binary size, it's possible to use an ESP-IDF tool to break down the exact differences in size.
 
-This operation isn't part of ``idf.py``, it's necessary to run the ``idf-size.py`` Python tool directly.
+This operation isn't part of ``idf.py``, it's necessary to run the ``idf_size.py`` Python tool directly.
 
-To do so, first locate the linker map file in the build directory. It will have the name ``PROJECTNAME.map``. The ``idf-size.py`` tool performs its analysis based on the output of the linker map file.
+To do so, first locate the linker map file in the build directory. It will have the name ``PROJECTNAME.map``. The ``idf_size.py`` tool performs its analysis based on the output of the linker map file.
 
 To compare with another binary, you will also need its corresponding ``.map`` file saved from the build directory.
 
@@ -214,6 +217,9 @@ For example, to compare two builds: one with the default :ref:`CONFIG_COMPILER_O
 We can see from the "Difference" column that changing this one setting caused the whole binary to be over 60 KB smaller and over 5 KB more RAM is available.
 
 It's also possible to use the "diff" mode to output a table of component-level (static library archive) differences:
+
+.. note::
+    To get the output in JSON or CSV format using ``idf_size.py`` it is possible to use the ``--format`` option.
 
 .. code-block:: bash
 
@@ -298,7 +304,7 @@ The following configuration options will reduce the final binary size of almost 
     - Disabling :ref:`CONFIG_ESP_ERR_TO_NAME_LOOKUP` will remove the lookup table to translate user-friendly names for error values (see :doc:`/api-guides/error-handling`) in error logs, etc. This saves some binary size, but error values will be printed as integers only.
     - Setting :ref:`CONFIG_ESP_SYSTEM_PANIC` to "Silent reboot" will save a small amount of binary size, however this is *only* recommended if no one will use UART output to debug the device.
     :CONFIG_IDF_TARGET_ARCH_RISCV: - Set :ref:`CONFIG_COMPILER_SAVE_RESTORE_LIBCALLS` to reduce binary size by replacing inlined prologues/epilogues with library calls.
-
+    - If the application binary uses only one of the security versions of the protocomm component, then the support for others can be disabled to save some code size. The support can be disabled through :ref:`CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_0`, :ref:`CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1` or :ref:`CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_2` respectively.
 .. note::
 
    In addition to the many configuration items shown here, there are a number of configuration options where changing the option from the default will increase binary size. These are not noted here. Where the increase is significant, this is usually noted in the configuration item help text.
@@ -310,11 +316,13 @@ Targeted Optimizations
 
 The following binary size optimizations apply to a particular component or a function:
 
-Wi-Fi
-@@@@@
+.. only:: SOC_WIFI_SUPPORTED
 
-- Disabling :ref:`CONFIG_ESP32_WIFI_ENABLE_WPA3_SAE` will save some Wi-Fi binary size if WPA3 support is not needed. (Note that WPA3 is mandatory for new Wi-Fi device certifications.)
-- Disabling :ref:`CONFIG_ESP_WIFI_SOFTAP_SUPPORT` will save some Wi-Fi binary size if soft-AP support is not needed.
+    Wi-Fi
+    @@@@@
+
+    - Disabling :ref:`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE` will save some Wi-Fi binary size if WPA3 support is not needed. (Note that WPA3 is mandatory for new Wi-Fi device certifications.)
+    - Disabling :ref:`CONFIG_ESP_WIFI_SOFTAP_SUPPORT` will save some Wi-Fi binary size if soft-AP support is not needed.
 
 .. only:: esp32
 
@@ -346,6 +354,15 @@ lwIP IPv6
 
       IPv6 is required by some components such as ``coap`` and :doc:`/api-reference/protocols/asio`, These components will not be available if IPV6 is disabled.
 
+lwIP IPv4
+@@@@@@@@@
+
+- If IPv4 connectivity is not required, setting :ref:`CONFIG_LWIP_IPV4` to false will reduce the size of the lwIP, supporting IPv6 only TCP/IP stack.
+
+  .. note::
+
+      Before disabling IPv4 support, please note that IPv6 only network environments are not ubiquitous and must be supported in the local network, e.g. by your internet service provider or using constrained local network settings.
+
 .. _newlib-nano-formatting:
 
 Newlib nano formatting
@@ -353,11 +370,17 @@ Newlib nano formatting
 
 By default, ESP-IDF uses newlib "full" formating for I/O (printf, scanf, etc.)
 
-Enabling the config option :ref:`CONFIG_NEWLIB_NANO_FORMAT` will switch newlib to the "nano" formatting mode. This both smaller in code size and a large part of the implementation is compiled into the {IDF_TARGET_NAME} ROM, so it doesn't need to be included in the binary at all.
+.. only:: CONFIG_ESP_ROM_HAS_NEWLIB_NANO_FORMAT
 
-The exact difference in binary size depends on which features the firmware uses, but 25 KB ~ 50 KB is typical.
+    Enabling the config option :ref:`CONFIG_NEWLIB_NANO_FORMAT` will switch newlib to the "nano" formatting mode. This both smaller in code size and a large part of the implementation is compiled into the {IDF_TARGET_NAME} ROM, so it doesn't need to be included in the binary at all.
 
-Enabling Nano formatting also reduces the stack usage of each function that calls printf() or another string formatting function, see :ref:`optimize-stack-sizes`.
+    The exact difference in binary size depends on which features the firmware uses, but 25 KB ~ 50 KB is typical.
+
+.. only:: CONFIG_ESP_ROM_HAS_NEWLIB_NORMAL_FORMAT
+
+    Disabling the config option :ref:`CONFIG_NEWLIB_NANO_FORMAT` will switch newlib to the "full" formatting mode. This will reduce the binary size, as {IDF_TARGET_NAME} has the full formatting version of the functions in ROM,  so it doesn't need to be included in the binary at all.
+
+Enabling Nano formatting reduces the stack usage of each function that calls printf() or another string formatting function, see :ref:`optimize-stack-sizes`.
 
 "Nano" formatting doesn't support 64-bit integers, or C99 formatting features. For a full list of restrictions, search for ``--enable-newlib-nano-formatted-io`` in the `Newlib README file`_.
 
@@ -419,7 +442,7 @@ VFS
 * :ref:`CONFIG_VFS_SUPPORT_DIR` — can be disabled if the application doesn't use directory related functions, such as ``readdir`` (see the description of this option for the complete list). Applications which only open, read and write specific files and don't need to enumerate or create directories can disable this option, reducing the code size by 0.5 kB or more, depending on the filesystem drivers in use.
 * :ref:`CONFIG_VFS_SUPPORT_IO` — can be disabled if the application doesn't use filesystems or file-like peripheral drivers. This disables all VFS functionality, including the three options mentioned above. When this option is disabled, :doc:`console </api-reference/system/console>` can't be used. Note that the application can still use standard I/O functions with socket file descriptors when this option is disabled. Compared to the default configuration, disabling this option reduces code size by about 9.4 kB.
 
-.. only:: esp32c2
+.. only:: CONFIG_ESP_ROM_HAS_HAL_SYSTIMER or CONFIG_ESP_ROM_HAS_HAL_WDT
 
     HAL
     @@@
@@ -429,7 +452,7 @@ VFS
         :CONFIG_ESP_ROM_HAS_HAL_SYSTIMER: * Enabling :ref:`CONFIG_HAL_SYSTIMER_USE_ROM_IMPL` can reduce the IRAM usage and binary size by linking in the systimer HAL driver of ROM implementation.
         :CONFIG_ESP_ROM_HAS_HAL_WDT: * Enabling :ref:`CONFIG_HAL_WDT_USE_ROM_IMPL` can reduce the IRAM usage and binary size by linking in the watchdog HAL driver of ROM implementation.
 
-.. only:: esp32c2
+.. only:: CONFIG_ESP_ROM_HAS_HEAP_TLSF
 
     Heap
     @@@@

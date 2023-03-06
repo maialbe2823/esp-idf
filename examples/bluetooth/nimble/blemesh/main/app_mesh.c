@@ -43,6 +43,14 @@ static int recent_test_id = STANDARD_TEST_ID;
 
 #define FAULT_ARR_SIZE 2
 
+#ifndef min
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef max
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
 static bool has_reg_fault = true;
 
 static int
@@ -196,9 +204,9 @@ static void gen_onoff_set_unack(struct bt_mesh_model *model,
 }
 
 static const struct bt_mesh_model_op gen_onoff_op[] = {
-    { BT_MESH_MODEL_OP_2(0x82, 0x01), 0, gen_onoff_get },
-    { BT_MESH_MODEL_OP_2(0x82, 0x02), 2, gen_onoff_set },
-    { BT_MESH_MODEL_OP_2(0x82, 0x03), 2, gen_onoff_set_unack },
+    { BT_MESH_MODEL_OP_2(0x82, 0x01), 0, (void *)gen_onoff_get },
+    { BT_MESH_MODEL_OP_2(0x82, 0x02), 2, (void *)gen_onoff_set },
+    { BT_MESH_MODEL_OP_2(0x82, 0x03), 2, (void *)gen_onoff_set_unack },
     BT_MESH_MODEL_OP_END,
 };
 
@@ -297,13 +305,13 @@ static void gen_move_set_unack(struct bt_mesh_model *model,
 }
 
 static const struct bt_mesh_model_op gen_level_op[] = {
-    { BT_MESH_MODEL_OP_2(0x82, 0x05), 0, gen_level_get },
-    { BT_MESH_MODEL_OP_2(0x82, 0x06), 3, gen_level_set },
-    { BT_MESH_MODEL_OP_2(0x82, 0x07), 3, gen_level_set_unack },
-    { BT_MESH_MODEL_OP_2(0x82, 0x09), 5, gen_delta_set },
-    { BT_MESH_MODEL_OP_2(0x82, 0x0a), 5, gen_delta_set_unack },
-    { BT_MESH_MODEL_OP_2(0x82, 0x0b), 3, gen_move_set },
-    { BT_MESH_MODEL_OP_2(0x82, 0x0c), 3, gen_move_set_unack },
+    { BT_MESH_MODEL_OP_2(0x82, 0x05), 0, (void *)gen_level_get },
+    { BT_MESH_MODEL_OP_2(0x82, 0x06), 3, (void *)gen_level_set },
+    { BT_MESH_MODEL_OP_2(0x82, 0x07), 3, (void *)gen_level_set_unack },
+    { BT_MESH_MODEL_OP_2(0x82, 0x09), 5, (void *)gen_delta_set },
+    { BT_MESH_MODEL_OP_2(0x82, 0x0a), 5, (void *)gen_delta_set_unack },
+    { BT_MESH_MODEL_OP_2(0x82, 0x0b), 3, (void *)gen_move_set },
+    { BT_MESH_MODEL_OP_2(0x82, 0x0c), 3, (void *)gen_move_set_unack },
     BT_MESH_MODEL_OP_END,
 };
 
@@ -339,8 +347,8 @@ static void vnd_model_recv(struct bt_mesh_model *model,
     os_mbuf_free_chain(msg);
 }
 
-static const struct bt_mesh_model_op vnd_model_op[] = {
-        { BT_MESH_MODEL_OP_3(0x01, CID_VENDOR), 0, vnd_model_recv },
+static struct bt_mesh_model_op vnd_model_op[] = {
+        { BT_MESH_MODEL_OP_3(0x01, CID_VENDOR), 0, (void *)vnd_model_recv },
         BT_MESH_MODEL_OP_END,
 };
 
@@ -361,7 +369,7 @@ static const struct bt_mesh_comp comp = {
 
 static int output_number(bt_mesh_output_action_t action, uint32_t number)
 {
-    ESP_LOGI(tag, "OOB Number: %u\n", number);
+    ESP_LOGI(tag, "OOB Number: %" PRIu32 "\n", number);
 
     return 0;
 }
@@ -443,7 +451,11 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    nimble_port_init();
+    ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(tag, "Failed to init nimble %d ", ret);
+        return;
+    }
 
     ble_svc_gap_init();
     ble_svc_gatt_init();

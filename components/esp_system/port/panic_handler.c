@@ -41,7 +41,7 @@
 
 extern int _invalid_pc_placeholder;
 
-extern void esp_panic_handler_reconfigure_wdts(void);
+extern void esp_panic_handler_reconfigure_wdts(uint32_t timeout_ms);
 
 extern void esp_panic_handler(panic_info_t *);
 
@@ -151,7 +151,7 @@ static void panic_handler(void *frame, bool pseudo_excause)
     }
 
     // Need to reconfigure WDTs before we stall any other CPU
-    esp_panic_handler_reconfigure_wdts();
+    esp_panic_handler_reconfigure_wdts(1000);
 
     esp_rom_delay_us(1);
     // Stall all other cores
@@ -196,20 +196,22 @@ static void panic_handler(void *frame, bool pseudo_excause)
  * This function must always be in IRAM as it is required to
  * re-enable the flash cache.
  */
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
 static void IRAM_ATTR panic_enable_cache(void)
 {
     int core_id = esp_cpu_get_core_id();
-
     if (!spi_flash_cache_enabled()) {
         esp_ipc_isr_stall_abort();
         spi_flash_enable_cache(core_id);
     }
 }
+#endif
 
 void IRAM_ATTR panicHandler(void *frame)
 {
-
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
     panic_enable_cache();
+#endif
     // This panic handler gets called for when the double exception vector,
     // kernel exception vector gets used; as well as handling interrupt-based
     // faults cache error, wdt expiry. EXCAUSE register gets written with
@@ -219,7 +221,9 @@ void IRAM_ATTR panicHandler(void *frame)
 
 void IRAM_ATTR xt_unhandled_exception(void *frame)
 {
+#if !CONFIG_APP_BUILD_TYPE_PURE_RAM_APP
     panic_enable_cache();
+#endif
     panic_handler(frame, false);
 }
 

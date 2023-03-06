@@ -29,7 +29,6 @@ extern "C" {
 
 #define I2S_LL_AD_BCK_FACTOR           (2)
 #define I2S_LL_PDM_BCK_FACTOR          (64)
-#define I2S_LL_BASE_CLK                (2 * APB_CLK_FREQ)
 
 #define I2S_LL_MCLK_DIVIDER_BIT_WIDTH  (6)
 #define I2S_LL_MCLK_DIVIDER_MAX        ((1 << I2S_LL_MCLK_DIVIDER_BIT_WIDTH) - 1)
@@ -40,10 +39,14 @@ extern "C" {
 #define I2S_LL_EVENT_TX_EOF         BIT(12)
 #define I2S_LL_EVENT_RX_DSCR_ERR    BIT(13)
 #define I2S_LL_EVENT_TX_DSCR_ERR    BIT(14)
+#define I2S_LL_EVENT_TX_TEOF        BIT(16)
 #define I2S_INTR_MAX                (UINT32_MAX)
 
 #define I2S_LL_TX_EVENT_MASK        I2S_LL_EVENT_TX_EOF
 #define I2S_LL_RX_EVENT_MASK        I2S_LL_EVENT_RX_EOF
+
+#define I2S_LL_PLL_F160M_CLK_FREQ   (160 * 1000000) // PLL_F160M_CLK: 160MHz
+#define I2S_LL_DEFAULT_PLL_CLK_FREQ     I2S_LL_PLL_F160M_CLK_FREQ    // The default PLL clock frequency while using I2S_CLK_SRC_DEFAULT
 
 /* I2S clock configuration structure */
 typedef struct {
@@ -287,7 +290,7 @@ static inline void i2s_ll_tx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
  * @note mclk on ESP32 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
+ * @param sclk system clock
  * @param mclk module clock
  * @param mclk_div integer part of the division from sclk to mclk
  */
@@ -363,7 +366,7 @@ static inline void i2s_ll_rx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
  * @note mclk on ESP32 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
+ * @param sclk system clock
  * @param mclk module clock
  * @param mclk_div integer part of the division from sclk to mclk
  */
@@ -1043,6 +1046,17 @@ static inline void i2s_ll_tx_set_pdm_sd_scale(i2s_dev_t *hw, i2s_pdm_sig_scale_t
 }
 
 /**
+ * @brief Set the PDM TX over sampling ratio
+ *
+ * @param hw  Peripheral I2S hardware instance address.
+ * @param ovr Over sampling ratio
+ */
+static inline void i2s_ll_tx_set_pdm_over_sample_ratio(i2s_dev_t *hw, uint32_t ovr)
+{
+    hw->pdm_conf.tx_sinc_osr2 = ovr;
+}
+
+/**
  * @brief Configure I2S TX PDM sample rate
  *        Fpdm = 64*Fpcm*fp/fs
  *
@@ -1054,7 +1068,6 @@ static inline void i2s_ll_tx_set_pdm_fpfs(i2s_dev_t *hw, uint32_t fp, uint32_t f
 {
     hw->pdm_freq_conf.tx_pdm_fp = fp;
     hw->pdm_freq_conf.tx_pdm_fs = fs;
-    hw->pdm_conf.tx_sinc_osr2 = fp / fs;
 }
 
 /**

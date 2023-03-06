@@ -72,7 +72,7 @@ typedef uint32_t TickType_t;
 #define portCRITICAL_NESTING_IN_TCB     1
 #define portSTACK_GROWTH                ( -1 )
 #define portTICK_PERIOD_MS              ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
-#define portBYTE_ALIGNMENT              4
+#define portBYTE_ALIGNMENT              16    // Xtensa Windowed ABI requires the stack pointer to always be 16-byte aligned. See "isa_rm.pdf 8.1.1 Windowed Register Usage and Stack Layout"
 #define portNOP()                       XT_NOP()    //Todo: Check if XT_NOP exists
 
 /* ---------------------------------------------- Forward Declarations -------------------------------------------------
@@ -143,6 +143,7 @@ void vPortCleanUpTCB ( void *pxTCB );
 #define portDISABLE_INTERRUPTS()            ({ \
     unsigned int prev_level = XTOS_SET_INTLEVEL(XCHAL_EXCM_LEVEL); \
     portbenchmarkINTERRUPT_DISABLE(); \
+    prev_level = ((prev_level >> XCHAL_PS_INTLEVEL_SHIFT) & XCHAL_PS_INTLEVEL_MASK); \
     prev_level; \
 })
 

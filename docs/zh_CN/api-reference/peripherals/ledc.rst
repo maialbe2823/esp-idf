@@ -1,6 +1,6 @@
 LED PWM 控制器
 ==============
-{IDF_TARGET_LEDC_CHAN_NUM:default="8", esp32="16", esp32s2="8", esp32c3="6", esp32s3="8", esp32c2="6", esp32h2="6"}
+{IDF_TARGET_LEDC_CHAN_NUM:default="6", esp32="16", esp32s2="8", esp32s3="8"}
 
 :link_to_translation:`en:[English]`
 
@@ -42,6 +42,10 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
 
     LED PWM 控制器 API 的关键配置
 
+.. note::
+
+    首次 LEDC 配置时，建议先配置定时器（调用函数 :cpp:func:`ledc_timer_config`），再配置通道（调用函数 :cpp:func:`ledc_channel_config`）。这样可以确保 IO 脚上的 PWM 信号自有输出开始其频率就是正确的。
+
 
 .. _ledc-api-configure-timer:
 
@@ -81,7 +85,7 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
          - 1 MHz
          - 高速 / 低速
          - 支持动态调频（DFS）功能
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - 低速
          - 支持动态调频（DFS）功能，支持Light-sleep模式
@@ -101,7 +105,7 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
        * - REF_TICK
          - 1 MHz
          - 支持动态调频（DFS）功能
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - 支持动态调频（DFS）功能，支持Light-sleep模式
        * - XTAL_CLK
@@ -120,7 +124,7 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
        * - APB_CLK
          - 80 MHz
          - /
-       * - RTC20M_CLK
+       * - RC_FAST_CLK
          - ~20 MHz
          - 支持动态调频（DFS）功能，支持Light-sleep模式
        * - XTAL_CLK
@@ -139,7 +143,26 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
        * - PLL_60M_CLK
          - 60 MHz
          - /
-       * - RTC20M_CLK
+       * - RC_FAST_CLK
+         - ~20 MHz
+         - 支持动态调频（DFS）功能，支持Light-sleep模式
+       * - XTAL_CLK
+         - 40 MHz
+         - 支持动态调频（DFS）功能
+
+.. only:: esp32c6
+
+    .. list-table:: {IDF_TARGET_NAME} LEDC 时钟源特性
+       :widths: 10 10 30
+       :header-rows: 1
+
+       * - 时钟名称
+         - 时钟频率
+         - 时钟功能
+       * - PLL_80M_CLK
+         - 80 MHz
+         - /
+       * - RC_FAST_CLK
          - ~20 MHz
          - 支持动态调频（DFS）功能，支持Light-sleep模式
        * - XTAL_CLK
@@ -155,10 +178,29 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
        * - 时钟名称
          - 时钟频率
          - 时钟功能
+       * - PLL_96M_CLK
+         - 96 MHz
+         - /
+       * - RC_FAST_CLK
+         - ~8 MHz
+         - 支持动态调频（DFS）功能，支持Light-sleep模式
+       * - XTAL_CLK
+         - 32 MHz
+         - 支持动态调频（DFS）功能
+
+.. only:: esp32h4
+
+    .. list-table:: {IDF_TARGET_NAME} LEDC 时钟源特性
+       :widths: 10 10 30
+       :header-rows: 1
+
+       * - 时钟名称
+         - 时钟频率
+         - 时钟功能
        * - APB_CLK
          - 96 MHz
          - /
-       * - RTC8M_CLK
+       * - RC_FAST_CLK
          - ~8 MHz
          - 支持动态调频（DFS）功能，支持Light-sleep模式
        * - XTAL_CLK
@@ -167,13 +209,13 @@ LED PWM 控制器可在无需 CPU 干预的情况下自动改变占空比，实�
 
 .. note::
 
-    .. only:: not esp32h2
+    .. only:: SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
 
-        1. 如果 {IDF_TARGET_NAME} 的定时器选用了RTCxM_CLK作为其时钟源，驱动会通过内部校准来得知这个时钟源的实际频率。这样确保了输出PWM信号频率的精准性。
+        1. 如果 {IDF_TARGET_NAME} 的定时器选用了RC_FAST_CLK作为其时钟源，驱动会通过内部校准来得知这个时钟源的实际频率。这样确保了输出PWM信号频率的精准性。
 
-    .. only:: esp32h2
+    .. only:: not SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
 
-        1. 如果 {IDF_TARGET_NAME} 的定时器选用了RTC8M_CLK作为其时钟源，LEDC的输出PWM信号频率可能会与设定值有一定偏差。由于{IDF_TARGET_NAME} 的硬件限制，驱动无法通过内部校准得知这个时钟源的实际频率。因此驱动默认使用其理论频率进行计算。
+        1. 如果 {IDF_TARGET_NAME} 的定时器选用了RC_FAST_CLK作为其时钟源，LEDC的输出PWM信号频率可能会与设定值有一定偏差。由于{IDF_TARGET_NAME} 的硬件限制，驱动无法通过内部校准得知这个时钟源的实际频率。因此驱动默认使用其理论频率进行计算。
 
     .. only:: not SOC_LEDC_HAS_TIMER_SPECIFIC_MUX
 
@@ -235,7 +277,7 @@ LED PWM 控制器硬件可逐渐改变占空比的数值。要使用此功能，
 
     最后需要调用 :cpp:func:`ledc_fade_start` 开启渐变。渐变可以在阻塞或非阻塞模式下运行，具体区别请查看 :cpp:enum:`ledc_fade_mode_t`。需要特别注意的是，不管在哪种模式下，下一次渐变或是单次占空比配置的指令生效都必须等到前一次渐变完成或被中止。中止一个正在运行中的渐变需要调用函数 :cpp:func:`ledc_fade_stop`。
 
-此外，在使能渐变后，每个通道都可以额外通过调用 :cpp:func:`ledc_cb_register` 注册一个回调函数用以获得渐变完成的事件通知。
+此外，在使能渐变后，每个通道都可以额外通过调用 :cpp:func:`ledc_cb_register` 注册一个回调函数用以获得渐变完成的事件通知。回调函数的原型被定义在 :cpp:type:`ledc_cb_t`。每个回调函数都应当返回一个布尔值给驱动的中断处理函数，用以表示是否有高优先级任务被其唤醒。此外，值得注意的是，由于驱动的中断处理函数被放在了 IRAM 中， 回调函数和其调用的函数也需要被放在 IRAM 中。 :cpp:func:`ledc_cb_register` 会检查回调函数及函数上下文的指针地址是否在正确的存储区域。
 
 如不需要渐变和渐变中断，可用函数 :cpp:func:`ledc_fade_func_uninstall` 关闭。
 

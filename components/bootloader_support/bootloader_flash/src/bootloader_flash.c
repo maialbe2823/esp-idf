@@ -10,6 +10,7 @@
 #include <esp_flash_encrypt.h>
 #include "sdkconfig.h"
 #include "soc/soc_caps.h"
+#include "hal/efuse_ll.h"
 
 #if CONFIG_IDF_TARGET_ESP32
 #   include "soc/spi_struct.h"
@@ -60,7 +61,7 @@ uint32_t bootloader_mmap_get_free_pages(void)
 const void *bootloader_mmap(uint32_t src_addr, uint32_t size)
 {
     if (map) {
-        ESP_LOGE(TAG, "tried to bootloader_mmap twice");
+        ESP_EARLY_LOGE(TAG, "tried to bootloader_mmap twice");
         return NULL; /* existing mapping in use... */
     }
     const void *result = NULL;
@@ -68,7 +69,7 @@ const void *bootloader_mmap(uint32_t src_addr, uint32_t size)
     size += (src_addr - src_page);
     esp_err_t err = spi_flash_mmap(src_page, size, SPI_FLASH_MMAP_DATA, &result, &map);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "spi_flash_mmap failed: 0x%x", err);
+        ESP_EARLY_LOGE(TAG, "spi_flash_mmap failed: 0x%x", err);
         return NULL;
     }
     return (void *)((intptr_t)result + (src_addr - src_page));
@@ -128,9 +129,9 @@ static const char *TAG = "bootloader_flash";
    50th block for bootloader_flash_read
 */
 #define MMU_BLOCK0_VADDR  SOC_DROM_LOW
-#define MMU_SIZE          (0x320000)
-#define MMU_BLOCK50_VADDR (MMU_BLOCK0_VADDR + MMU_SIZE)
-#define FLASH_READ_VADDR MMU_BLOCK50_VADDR
+#define MMAP_MMU_SIZE     (0x320000)
+#define MMU_BLOCK50_VADDR (MMU_BLOCK0_VADDR + MMAP_MMU_SIZE)
+#define FLASH_READ_VADDR  MMU_BLOCK50_VADDR
 
 #else // !CONFIG_IDF_TARGET_ESP32
 
@@ -138,16 +139,12 @@ static const char *TAG = "bootloader_flash";
    63th block for bootloader_flash_read
 */
 #define MMU_BLOCK0_VADDR  SOC_DROM_LOW
-#ifdef SOC_MMU_PAGE_SIZE_CONFIGURABLE
-#define MMU_SIZE          (DRAM0_CACHE_ADDRESS_HIGH(SPI_FLASH_MMU_PAGE_SIZE) - DRAM0_CACHE_ADDRESS_LOW - SPI_FLASH_MMU_PAGE_SIZE) // This mmu size means that the mmu size to be mapped
-#else
-#define MMU_SIZE          (DRAM0_CACHE_ADDRESS_HIGH - DRAM0_CACHE_ADDRESS_LOW - SPI_FLASH_MMU_PAGE_SIZE) // This mmu size means that the mmu size to be mapped
-#endif
-#define MMU_BLOCK63_VADDR (MMU_BLOCK0_VADDR + MMU_SIZE)
+#define MMAP_MMU_SIZE     (DRAM0_CACHE_ADDRESS_HIGH - DRAM0_CACHE_ADDRESS_LOW) // This mmu size means that the mmu size to be mapped
+#define MMU_BLOCK63_VADDR (MMU_BLOCK0_VADDR + MMAP_MMU_SIZE - SPI_FLASH_MMU_PAGE_SIZE)
 #define FLASH_READ_VADDR MMU_BLOCK63_VADDR
 #endif
 
-#define MMU_FREE_PAGES    (MMU_SIZE / FLASH_BLOCK_SIZE)
+#define MMU_FREE_PAGES    (MMAP_MMU_SIZE / CONFIG_MMU_PAGE_SIZE)
 
 static bool mapped;
 
@@ -169,7 +166,7 @@ const void *bootloader_mmap(uint32_t src_paddr, uint32_t size)
         ESP_EARLY_LOGE(TAG, "tried to bootloader_mmap twice");
         return NULL; /* can't map twice */
     }
-    if (size > MMU_SIZE) {
+    if (size > MMAP_MMU_SIZE) {
         ESP_EARLY_LOGE(TAG, "bootloader_mmap excess size %x", size);
         return NULL;
     }
@@ -183,7 +180,7 @@ const void *bootloader_mmap(uint32_t src_paddr, uint32_t size)
      * Now simply check if it's valid vaddr, didn't check if it's readable, writable or executable.
      * TODO: IDF-4710
      */
-    if (mmu_ll_check_valid_ext_vaddr_region(0, MMU_BLOCK0_VADDR, size_after_paddr_aligned) == 0) {
+    if (mmu_ll_check_valid_ext_vaddr_region(0, MMU_BLOCK0_VADDR, size_after_paddr_aligned, MMU_VADDR_DATA | MMU_VADDR_INSTRUCTION) == 0) {
         ESP_EARLY_LOGE(TAG, "vaddr not valid");
         return NULL;
     }
@@ -333,15 +330,15 @@ static esp_err_t bootloader_flash_read_allow_decrypt(size_t src_addr, void *dest
 esp_err_t bootloader_flash_read(size_t src_addr, void *dest, size_t size, bool allow_decrypt)
 {
     if (src_addr & 3) {
-        ESP_LOGE(TAG, "bootloader_flash_read src_addr 0x%x not 4-byte aligned", src_addr);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_read src_addr 0x%x not 4-byte aligned", src_addr);
         return ESP_FAIL;
     }
     if (size & 3) {
-        ESP_LOGE(TAG, "bootloader_flash_read size 0x%x not 4-byte aligned", size);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_read size 0x%x not 4-byte aligned", size);
         return ESP_FAIL;
     }
     if ((intptr_t)dest & 3) {
-        ESP_LOGE(TAG, "bootloader_flash_read dest 0x%x not 4-byte aligned", (intptr_t)dest);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_read dest 0x%x not 4-byte aligned", (intptr_t)dest);
         return ESP_FAIL;
     }
 
@@ -357,15 +354,15 @@ esp_err_t bootloader_flash_write(size_t dest_addr, void *src, size_t size, bool 
     esp_err_t err;
     size_t alignment = write_encrypted ? 32 : 4;
     if ((dest_addr % alignment) != 0) {
-        ESP_LOGE(TAG, "bootloader_flash_write dest_addr 0x%x not %d-byte aligned", dest_addr, alignment);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_write dest_addr 0x%x not %d-byte aligned", dest_addr, alignment);
         return ESP_FAIL;
     }
     if ((size % alignment) != 0) {
-        ESP_LOGE(TAG, "bootloader_flash_write size 0x%x not %d-byte aligned", size, alignment);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_write size 0x%x not %d-byte aligned", size, alignment);
         return ESP_FAIL;
     }
     if (((intptr_t)src % 4) != 0) {
-        ESP_LOGE(TAG, "bootloader_flash_write src 0x%x not 4 byte aligned", (intptr_t)src);
+        ESP_EARLY_LOGE(TAG, "bootloader_flash_write src 0x%x not 4 byte aligned", (intptr_t)src);
         return ESP_FAIL;
     }
 
@@ -609,38 +606,6 @@ void bootloader_spi_flash_reset(void)
     bootloader_execute_flash_command(CMD_RESET, 0, 0, 0);
 }
 
-#if SOC_CACHE_SUPPORT_WRAP
-esp_err_t bootloader_flash_wrap_set(spi_flash_wrap_mode_t mode)
-{
-    uint32_t reg_bkp_ctrl = SPIFLASH.ctrl.val;
-    uint32_t reg_bkp_usr  = SPIFLASH.user.val;
-    SPIFLASH.user.fwrite_dio = 0;
-    SPIFLASH.user.fwrite_dual = 0;
-    SPIFLASH.user.fwrite_qio = 1;
-    SPIFLASH.user.fwrite_quad = 0;
-    SPIFLASH.ctrl.fcmd_dual = 0;
-    SPIFLASH.ctrl.fcmd_quad = 0;
-    SPIFLASH.user.usr_dummy = 0;
-    SPIFLASH.user.usr_addr = 1;
-    SPIFLASH.user.usr_command = 1;
-    SPIFLASH.user2.usr_command_bitlen = 7;
-    SPIFLASH.user2.usr_command_value = CMD_WRAP;
-    SPIFLASH.user1.usr_addr_bitlen = 23;
-    SPIFLASH.addr = 0;
-    SPIFLASH.user.usr_miso = 0;
-    SPIFLASH.user.usr_mosi = 1;
-    SPIFLASH.mosi_dlen.usr_mosi_bit_len = 7;
-    SPIFLASH.data_buf[0] = (uint32_t) mode << 4;;
-    SPIFLASH.cmd.usr = 1;
-    while(SPIFLASH.cmd.usr != 0)
-    { }
-
-    SPIFLASH.ctrl.val = reg_bkp_ctrl;
-    SPIFLASH.user.val = reg_bkp_usr;
-    return ESP_OK;
-}
-#endif //SOC_CACHE_SUPPORT_WRAP
-
 /*******************************************************************************
  * XMC startup flow
  ******************************************************************************/
@@ -649,7 +614,7 @@ esp_err_t bootloader_flash_wrap_set(spi_flash_wrap_mode_t mode)
 #define XMC_VENDOR_ID 0x20
 
 #if BOOTLOADER_BUILD
-#define BOOTLOADER_FLASH_LOG(level, ...)    ESP_LOG##level(TAG, ##__VA_ARGS__)
+#define BOOTLOADER_FLASH_LOG(level, ...)    ESP_EARLY_LOG##level(TAG, ##__VA_ARGS__)
 #else
 static DRAM_ATTR char bootloader_flash_tag[] = "bootloader_flash";
 #define BOOTLOADER_FLASH_LOG(level, ...)    ESP_DRAM_LOG##level(bootloader_flash_tag, ##__VA_ARGS__)
@@ -769,10 +734,8 @@ esp_err_t IRAM_ATTR bootloader_flash_reset_chip(void)
     bootloader_execute_flash_command(0x05, 0, 0, 0);
 #if CONFIG_IDF_TARGET_ESP32
     if (SPI1.ext2.st != 0)
-#elif CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-    if (SPIMEM1.fsm.st != 0)
 #else
-    if (SPIMEM1.fsm.spi0_mst_st != 0)
+    if (!spimem_flash_ll_host_idle(&SPIMEM1))
 #endif
     {
         return ESP_FAIL;
@@ -781,4 +744,13 @@ esp_err_t IRAM_ATTR bootloader_flash_reset_chip(void)
     bootloader_execute_flash_command(0x99, 0, 0, 0);
 
     return ESP_OK;
+}
+
+bool bootloader_flash_is_octal_mode_enabled(void)
+{
+#if SOC_SPI_MEM_SUPPORT_OPI_MODE
+    return efuse_ll_get_flash_type();
+#else
+    return false;
+#endif
 }

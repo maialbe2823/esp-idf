@@ -3,7 +3,7 @@ High Resolution Timer (ESP Timer)
 
 {IDF_TARGET_HR_TIMER:default = "SYSTIMER", esp32 = "LAC timer"}
 
-{IDF_TARGET_HR_TIMER_Resolution:default = "Not updated", esp32 = "64", esp32s2 = "64", esp32c3 = "52", esp32s3 = "52", esp32c2 = "52"}
+{IDF_TARGET_HR_TIMER_Resolution:default = "Not updated", esp32 = "64", esp32s2 = "64", esp32c3 = "52", esp32s3 = "52", esp32c2 = "52", esp32c6 = "52"}
 
 
 Overview
@@ -61,7 +61,16 @@ Callback functions
 Timer callbacks which are processed by ``ESP_TIMER_ISR`` method should not call the context switch call - ``portYIELD_FROM_ISR()``, instead of this you should use the :cpp:func:`esp_timer_isr_dispatch_need_yield` function.
 The context switch will be done after all ISR dispatch timers have been processed, if required by the system.
 
-esp_timer during the light sleep
+.. only:: SOC_ETM_SUPPORTED and SOC_SYSTIMER_SUPPORT_ETM
+
+    ETM Event
+    ---------
+
+    The esp_timer is constructed based on a hardware timer called *systimer*, which is able to generate the alarm event and interact with the :doc:`ETM </api-reference/peripherals/etm>` module. You can call :cpp:func:`esp_timer_new_etm_alarm_event` to get the corresponding ETM event handle.
+
+    To know more about how to connect the event to an ETM channel, please refer to the :doc:`ETM </api-reference/peripherals/etm>` documentation.
+
+esp_timer during light sleep
 --------------------------------
 
 During light sleep, the esp_timer counter stops and no callback functions are called.
@@ -77,7 +86,7 @@ you can use the `skip_unhandled_events` option during :cpp:func:`esp_timer_creat
 When the `skip_unhandled_events` is true, if a periodic timer expires one or more times during light sleep
 then only one callback is called on wake.
 
-Using the `skip_unhandled_events` option with `automatic light sleep` (see :doc:`Power Management APIs <power_management>`) helps to reduce the consumption of the system when it is in light sleep. The duration of light sleep is also determined by esp_timers. Timers with `skip_unhandled_events` option will not wake up the system.
+Using the `skip_unhandled_events` option with `automatic light sleep` (see :doc:`Power Management APIs <power_management>`) helps to reduce the power consumption of the system when it is in light sleep. The duration of light sleep is also determined by esp_timers. Timers with `skip_unhandled_events` option will not wake up the system.
 
 Handling callbacks
 ------------------
@@ -85,7 +94,7 @@ Handling callbacks
 esp_timer is designed to achieve a high-resolution low latency timer and the ability to handle delayed events.
 If the timer is late then the callback will be called as soon as possible, it will not be lost.
 In the worst case, when the timer has not been processed for more than one period (for periodic timers),
-in this case the callbacks will be called one after the other without waiting for the set period.
+the callbacks will be called one after the other without waiting for the set period.
 This can be bad for some applications, and the `skip_unhandled_events` option was introduced to eliminate this behavior.
 If `skip_unhandled_events` is set then a periodic timer that has expired multiple times without being able to call
 the callback will still result in only one callback event once processing is possible.

@@ -64,17 +64,20 @@ config BT_NIMBLE_LOG_LEVEL
 
 config BT_NIMBLE_MAX_CONNECTIONS
     int "Maximum number of concurrent connections"
-    range 1 8 if (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32H2)
+    range 1 8 if (IDF_TARGET_ESP32H4 || IDF_TARGET_ESP32C6)
     range 1 2 if IDF_TARGET_ESP32C2
-    range 1 9 if IDF_TARGET_ESP32
-    default 3 if (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32H2)
-    default 2 if IDF_TARGET_ESP32C2
+    range 1 9 if !SOC_ESP_NIMBLE_CONTROLLER
+    range 1 2
+    default 3 if (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32H4)
+    default 2 if (IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C6)
+    default 1
     depends on BT_NIMBLE_ENABLED
     help
         Defines maximum number of concurrent BLE connections. For ESP32, user
         is expected to configure BTDM_CTRL_BLE_MAX_CONN from controller menu
         along with this option. Similarly for ESP32-C3 or ESP32-S3, user is expected to
         configure BT_CTRL_BLE_MAX_ACT from controller menu.
+        For ESP32C2, ESP32C6 and ESP32H2, each connection will take about 1k DRAM.
 
 config BT_NIMBLE_MAX_BONDS
     int "Maximum number of bonds to save across reboots"
@@ -240,7 +243,8 @@ config BT_NIMBLE_SVC_GAP_APPEARANCE
 menu "Memory Settings"
     config BT_NIMBLE_MSYS_1_BLOCK_COUNT
         int "MSYS_1 Block Count"
-        default 12
+        default 24 if SOC_ESP_NIMBLE_CONTROLLER
+        default 12 if !SOC_ESP_NIMBLE_CONTROLLER
         help
             MSYS is a system level mbuf registry. For prepare write & prepare
             responses MBUFs are allocated out of msys_1 pool. For NIMBLE_MESH
@@ -249,7 +253,8 @@ menu "Memory Settings"
 
     config BT_NIMBLE_MSYS_1_BLOCK_SIZE
         int    "MSYS_1 Block Size"
-        default 256
+        default 128 if SOC_ESP_NIMBLE_CONTROLLER
+        default 256 if !SOC_ESP_NIMBLE_CONTROLLER
         help
                 Dynamic memory size of block 1
 
@@ -366,7 +371,10 @@ menuconfig BT_NIMBLE_MESH
     depends on BT_NIMBLE_ENABLED
     default n
     help
-        Enable BLE Mesh functionality
+        Enable BLE Mesh example present in upstream mynewt-nimble and not maintained by Espressif.
+
+        IDF maintains ESP-BLE-MESH as the official Mesh solution. Please refer to ESP-BLE-MESH guide at:
+        `https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/esp-ble-mesh/ble-mesh-index.html`
 
 config BT_NIMBLE_MESH_PROXY
     bool "Enable mesh proxy functionality"
@@ -481,7 +489,7 @@ config BT_NIMBLE_HOST_BASED_PRIVACY
 
 config BT_NIMBLE_ENABLE_CONN_REATTEMPT
     bool "Enable connection reattempts on connection establishment error"
-    default y if (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32H2 || IDF_TARGET_ESP32C2)
+    default y if (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || SOC_ESP_NIMBLE_CONTROLLER)
     default n if IDF_TARGET_ESP32
     help
         Enable to make the NimBLE host to reattempt GAP connection on connection
@@ -536,6 +544,8 @@ if BT_NIMBLE_EXT_ADV
             instances. Minimum there is always one instance of
             advertising. Enter how many more advertising instances you
             want.
+            For ESP32C2, ESP32C6 and ESP32H2, each extended advertising instance
+            will take about 0.5k DRAM.
 
     config BT_NIMBLE_EXT_ADV_MAX_SIZE
         int "Maximum length of the advertising data."
@@ -560,14 +570,13 @@ if BT_NIMBLE_EXT_ADV
         default y
         help
                 This enables controller transfer periodic sync events to host
-
 endif
 
 config BT_NIMBLE_MAX_PERIODIC_SYNCS
     int "Maximum number of periodic advertising syncs"
     depends on BT_NIMBLE_50_FEATURE_SUPPORT
-    range 0 8 if !IDF_TARGET_ESP32C2
     range 0 3 if IDF_TARGET_ESP32C2
+    range 0 8
     default 1 if BT_NIMBLE_ENABLE_PERIODIC_ADV
     default 0
     help
@@ -577,16 +586,23 @@ config BT_NIMBLE_MAX_PERIODIC_SYNCS
 
 config BT_NIMBLE_MAX_PERIODIC_ADVERTISER_LIST
     int "Maximum number of periodic advertiser list"
-    depends on BT_NIMBLE_50_FEATURE_SUPPORT && (IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32H2)
+    depends on BT_NIMBLE_50_FEATURE_SUPPORT && SOC_ESP_NIMBLE_CONTROLLER
     range 1 5
     default 5 if BT_NIMBLE_50_FEATURE_SUPPORT
     help
         Set this option to set the upper limit for number of periodic advertiser list.
 
+config BT_NIMBLE_BLE_POWER_CONTROL
+    bool "Enable support for BLE Power Control"
+    depends on BT_NIMBLE_50_FEATURE_SUPPORT && IDF_TARGET_ESP32C6
+    default n
+    help
+        Set this option to enable the Power Control feature
+
 choice BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM
     prompt "Coexistence: limit on MAX Tx/Rx time for coded-PHY connection"
     default BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_DIS
-    depends on ESP32_WIFI_SW_COEXIST_ENABLE && BT_NIMBLE_ENABLED
+    depends on ESP_WIFI_SW_COEXIST_ENABLE && BT_NIMBLE_ENABLED
     help
             When using PHY-Coded in BLE connection, limitation on max tx/rx time can be applied to
             better avoid dramatic performance deterioration of Wi-Fi.
@@ -604,7 +620,7 @@ endchoice
 
 config BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_EFF
     int
-    default 0 if !(ESP32_WIFI_SW_COEXIST_ENABLE && BT_NIMBLE_ENABLED)
+    default 0 if !(ESP_WIFI_SW_COEXIST_ENABLE && BT_NIMBLE_ENABLED)
     default 1 if BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_EN
     default 0 if BT_NIMBLE_COEX_PHY_CODED_TX_RX_TLIM_DIS
 

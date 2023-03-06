@@ -2,7 +2,10 @@ menu "Power Management"
     config PM_ENABLE
         bool "Support for power management"
         # SMP FreeRTOS currently does not support power management IDF-4997
-        depends on !FREERTOS_SMP
+        # ESP32H2 currently does not support power management IDF-6270
+        # Note. Disabling this option for H2 will also cause all sdkconfig.release test cases run without pm enabled
+        # ORed with  __DOXYGEN__ to pass H2 docs build, need to remove when pm is supported on H2
+        depends on (!FREERTOS_SMP && !IDF_TARGET_ESP32H2) || __DOXYGEN__
         default n
         help
             If enabled, application is compiled with support for power management.
@@ -84,7 +87,7 @@ menu "Power Management"
 
     config PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP
         bool "Power down CPU in light sleep"
-        depends on IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3
+        depends on IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C6
         select PM_POWER_DOWN_TAGMEM_IN_LIGHT_SLEEP if ESP32S3_DATA_CACHE_16KB
         default y
         help
@@ -100,6 +103,15 @@ menu "Power Management"
         help
             If enabled, the I/D-cache tag memory will be retained in light sleep. Depending on the the
             cache configuration, if this option is enabled, it will consume up to 9 KB of internal RAM.
+
+    config PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
+        bool "Power down Digital Peripheral in light sleep"
+        depends on SOC_PAU_SUPPORTED
+        default n #TODO: enable by default if periph init/deinit management supported (WIFI-5252)
+        help
+            If enabled, the minimum digital peripheral register context to keep the system running is saved
+            and will reduce sleep current consumption by about 100 uA. enabling this option will consume
+            at least 4.55 KB of internal RAM.
 
     config PM_UPDATE_CCOMPARE_HLI_WORKAROUND
         bool

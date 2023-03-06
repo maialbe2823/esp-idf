@@ -187,7 +187,7 @@ In the callback function, users can fetch the event specific data that is filled
 
 The TX done event data is defined in :cpp:type:`rmt_tx_done_event_data_t`:
 
-- :cpp:member:`rmt_tx_done_event_data_t::num_symbols` tells the number of transmitted RMT symbols. This also reflects the size of encoding artifacts.
+- :cpp:member:`rmt_tx_done_event_data_t::num_symbols` tells the number of transmitted RMT symbols. This also reflects the size of encoding artifacts. Please note, this value will count in the EOF symbol as well, which is appended by the driver, to mark the end of one transaction.
 
 The RX complete event data is defined in :cpp:type:`rmt_rx_done_event_data_t`:
 
@@ -527,7 +527,7 @@ API Reference
 .. include-build-file:: inc/rmt_rx.inc
 .. include-build-file:: inc/rmt_common.inc
 .. include-build-file:: inc/rmt_encoder.inc
-.. include-build-file:: inc/components/driver/include/driver/rmt_types.inc
+.. include-build-file:: inc/components/driver/rmt/include/driver/rmt_types.inc
 .. include-build-file:: inc/components/hal/include/hal/rmt_types.inc
 
 

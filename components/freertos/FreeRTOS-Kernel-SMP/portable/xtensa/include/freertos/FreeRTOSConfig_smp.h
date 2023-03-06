@@ -131,7 +131,7 @@ This file get's pulled into assembly sources. Therefore, some includes need to b
 #define configCPU_CLOCK_HZ                              (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000)
 #define configTICK_RATE_HZ                              CONFIG_FREERTOS_HZ
 #define configMAX_PRIORITIES                            ( 25 )  //This has impact on speed of search for highest priority
-#define configMINIMAL_STACK_SIZE                        ( 768 + configSTACK_OVERHEAD_TOTAL )
+#define configMINIMAL_STACK_SIZE                        ( CONFIG_FREERTOS_IDLE_TASK_STACKSIZE + configSTACK_OVERHEAD_TOTAL )
 #define configUSE_TIME_SLICING                          1
 #define configUSE_16_BIT_TICKS                          0
 #define configIDLE_SHOULD_YIELD                         0   //Todo: Check this
@@ -158,7 +158,7 @@ This file get's pulled into assembly sources. Therefore, some includes need to b
 #define configUSE_QUEUE_SETS                            1
 #define configQUEUE_REGISTRY_SIZE                       CONFIG_FREERTOS_QUEUE_REGISTRY_SIZE
 #define configUSE_TASK_NOTIFICATIONS                    1
-#define configTASK_NOTIFICATION_ARRAY_ENTRIES           1
+#define configTASK_NOTIFICATION_ARRAY_ENTRIES           CONFIG_FREERTOS_TASK_NOTIFICATION_ARRAY_ENTRIES
 
 // ----------------------- System --------------------------
 
@@ -282,6 +282,18 @@ Default values for trace macros added by ESP-IDF and are not part of Vanilla Fre
     #define traceISR_ENTER(_n_)
 #endif
 
+#ifndef traceQUEUE_GIVE_FROM_ISR
+    #define traceQUEUE_GIVE_FROM_ISR( pxQueue )
+#endif
+
+#ifndef traceQUEUE_GIVE_FROM_ISR_FAILED
+    #define traceQUEUE_GIVE_FROM_ISR_FAILED( pxQueue )
+#endif
+
+#ifndef traceQUEUE_SEMAPHORE_RECEIVE
+    #define traceQUEUE_SEMAPHORE_RECEIVE( pxQueue )
+#endif
+
 /* ------------------------------------------------ IDF Compatibility --------------------------------------------------
  * - We need these in order for ESP-IDF to compile
  * ------------------------------------------------------------------------------------------------------------------ */
@@ -299,20 +311,6 @@ extern volatile uint32_t port_switch_flag[portNUM_PROCESSORS];
 #define os_task_switch_is_pended(_cpu_) (false)
 #endif
 #endif
-
-// ---------------------- Features -------------------------
-
-/* These currently aren't required, but could be useful additions in the future */
-#if 0
-#ifndef configIDLE_TASK_STACK_SIZE
-#define configIDLE_TASK_STACK_SIZE                      CONFIG_FREERTOS_IDLE_TASK_STACKSIZE
-#endif
-#if CONFIG_FREERTOS_CHECK_MUTEX_GIVEN_BY_OWNER
-#define configCHECK_MUTEX_GIVEN_BY_OWNER                1
-#else
-#define configCHECK_MUTEX_GIVEN_BY_OWNER                0
-#endif
-#endif //0
 
 // -------------------- Compatibility ----------------------
 

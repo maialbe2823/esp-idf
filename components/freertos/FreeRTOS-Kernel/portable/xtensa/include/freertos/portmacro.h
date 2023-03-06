@@ -139,7 +139,8 @@ typedef uint32_t TickType_t;
 #define portCRITICAL_NESTING_IN_TCB     0
 #define portSTACK_GROWTH                ( -1 )
 #define portTICK_PERIOD_MS              ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
-#define portBYTE_ALIGNMENT              4
+#define portBYTE_ALIGNMENT              16    // Xtensa Windowed ABI requires the stack pointer to always be 16-byte aligned. See "isa_rm.pdf 8.1.1 Windowed Register Usage and Stack Layout"
+#define portTICK_TYPE_IS_ATOMIC         1
 #define portNOP()                       XT_NOP()
 
 
@@ -446,6 +447,13 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void);
 
 #define portASSERT_IF_IN_ISR() vPortAssertIfInISR()
 
+/**
+ * @brief Used by FreeRTOS functions to call the correct version of critical section API
+ */
+#if ( configNUM_CORES > 1 )
+#define portCHECK_IF_IN_ISR()   xPortInIsrContext()
+#endif
+
 // ------------------ Critical Sections --------------------
 
 /**
@@ -634,48 +642,13 @@ FORCE_INLINE_ATTR BaseType_t xPortGetCoreID(void)
 /* ------------------------------------------------------ Misc ---------------------------------------------------------
  * - Miscellaneous porting macros
  * - These are not port of the FreeRTOS porting interface, but are used by other FreeRTOS dependent components
- * - [refactor-todo] Remove dependency on MPU wrappers by modifying TCB
  * ------------------------------------------------------------------------------------------------------------------ */
 
 // -------------------- Co-Processor -----------------------
 
-// When coprocessors are defined, we maintain a pointer to coprocessors area.
-// We currently use a hack: redefine field xMPU_SETTINGS in TCB block as a structure that can hold:
-// MPU wrappers, coprocessor area pointer, trace code structure, and more if needed.
-// The field is normally used for memory protection. FreeRTOS should create another general purpose field.
-typedef struct {
 #if XCHAL_CP_NUM > 0
-    volatile StackType_t *coproc_area; // Pointer to coprocessor save area; MUST BE FIRST
-#endif
-
-#if portUSING_MPU_WRAPPERS
-    // Define here mpu_settings, which is port dependent
-    int mpu_setting; // Just a dummy example here; MPU not ported to Xtensa yet
-#endif
-} xMPU_SETTINGS;
-
-// Main hack to use MPU_wrappers even when no MPU is defined (warning: mpu_setting should not be accessed; otherwise move this above xMPU_SETTINGS)
-#if (XCHAL_CP_NUM > 0) && !portUSING_MPU_WRAPPERS   // If MPU wrappers not used, we still need to allocate coproc area
-#undef portUSING_MPU_WRAPPERS
-#define portUSING_MPU_WRAPPERS 1   // Enable it to allocate coproc area
-#define MPU_WRAPPERS_H             // Override mpu_wrapper.h to disable unwanted code
-#define PRIVILEGED_FUNCTION
-#define PRIVILEGED_DATA
-#endif
-
-void _xt_coproc_release(volatile void *coproc_sa_base);
-
-/*
- * The structures and methods of manipulating the MPU are contained within the
- * port layer.
- *
- * Fills the xMPUSettings structure with the memory region information
- * contained in xRegions.
- */
-#if( portUSING_MPU_WRAPPERS == 1 )
-struct xMEMORY_REGION;
-void vPortStoreTaskMPUSettings( xMPU_SETTINGS *xMPUSettings, const struct xMEMORY_REGION *const xRegions, StackType_t *pxBottomOfStack, uint32_t usStackDepth ) PRIVILEGED_FUNCTION;
-void vPortReleaseTaskMPUSettings( xMPU_SETTINGS *xMPUSettings );
+void vPortCleanUpCoprocArea(void *pvTCB);
+#define portCLEAN_UP_COPROC(pvTCB)      vPortCleanUpCoprocArea(pvTCB)
 #endif
 
 // -------------------- Heap Related -----------------------
@@ -712,14 +685,6 @@ extern volatile uint32_t port_switch_flag[portNUM_PROCESSORS];
 #define os_task_switch_is_pended(_cpu_) (port_switch_flag[_cpu_])
 #else
 #define os_task_switch_is_pended(_cpu_) (false)
-#endif
-
-// --------------------- Debugging -------------------------
-
-#if CONFIG_FREERTOS_ASSERT_ON_UNTESTED_FUNCTION
-#define UNTESTED_FUNCTION() do{ esp_rom_printf("Untested FreeRTOS function %s\r\n", __FUNCTION__); configASSERT(false); } while(0)
-#else
-#define UNTESTED_FUNCTION()
 #endif
 
 #ifdef __cplusplus

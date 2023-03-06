@@ -9,7 +9,7 @@
 #include "sdkconfig.h"
 #include <stdint.h>
 #include "spinlock.h"
-#include "soc/interrupt_core0_reg.h"
+#include "soc/interrupt_reg.h"
 #include "esp_macros.h"
 #include "esp_cpu.h"
 #include "esp_private/crosscore_int.h"
@@ -256,11 +256,11 @@ void vPortEnterCritical(void);
 void vPortExitCritical(void);
 
 //IDF task critical sections
-#define portTRY_ENTER_CRITICAL(lock, timeout)       {((void) lock; (void) timeout; vPortEnterCritical(); pdPASS;)}
+#define portTRY_ENTER_CRITICAL(lock, timeout)       ({(void) lock; (void) timeout; vPortEnterCritical(); pdPASS;})
 #define portENTER_CRITICAL_IDF(lock)                ({(void) lock; vPortEnterCritical();})
 #define portEXIT_CRITICAL_IDF(lock)                 ({(void) lock; vPortExitCritical();})
 //IDF ISR critical sections
-#define portTRY_ENTER_CRITICAL_ISR(lock, timeout)   {((void) lock; (void) timeout; vPortEnterCritical(); pdPASS;)}
+#define portTRY_ENTER_CRITICAL_ISR(lock, timeout)   ({(void) lock; (void) timeout; vPortEnterCritical(); pdPASS;})
 #define portENTER_CRITICAL_ISR(lock)                ({(void) lock; vPortEnterCritical();})
 #define portEXIT_CRITICAL_ISR(lock)                 ({(void) lock; vPortExitCritical();})
 //IDF safe critical sections (they're the same)
@@ -308,14 +308,6 @@ extern volatile BaseType_t xPortSwitchFlag;
 #define os_task_switch_is_pended(_cpu_) (xPortSwitchFlag)
 #else
 #define os_task_switch_is_pended(_cpu_) (false)
-#endif
-
-// --------------------- Debugging -------------------------
-
-#if CONFIG_FREERTOS_ASSERT_ON_UNTESTED_FUNCTION
-#define UNTESTED_FUNCTION() do{ esp_rom_printf("Untested FreeRTOS function %s\r\n", __FUNCTION__); configASSERT(false); } while(0)
-#else
-#define UNTESTED_FUNCTION()
 #endif
 
 // --------------- Compatibility Includes ------------------

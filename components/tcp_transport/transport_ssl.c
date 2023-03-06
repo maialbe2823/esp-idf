@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "esp_tls.h"
 #include "esp_log.h"
@@ -13,6 +14,7 @@
 #include "esp_transport.h"
 #include "esp_transport_ssl.h"
 #include "esp_transport_internal.h"
+#include "errno.h"
 
 #define INVALID_SOCKET (-1)
 
@@ -20,7 +22,7 @@
     transport_esp_tls_t *ssl = ssl_get_context_data(t);  \
     if (!ssl) { return; }
 
-static const char *TAG = "TRANSPORT_BASE";
+static const char *TAG = "transport_base";
 
 typedef enum {
     TRANS_SSL_INIT = 0,
@@ -169,7 +171,7 @@ static int base_poll_read(esp_transport_handle_t t, int timeout_ms)
         ESP_LOGE(TAG, "poll_read select error %d, errno = %s, fd = %d", sock_errno, strerror(sock_errno), ssl->sockfd);
         ret = -1;
     } else if (ret == 0) {
-        ESP_LOGD(TAG, "poll_read: select - Timeout before any socket was ready!");
+        ESP_LOGV(TAG, "poll_read: select - Timeout before any socket was ready!");
     }
     return ret;
 }
@@ -291,6 +293,8 @@ static int tcp_read(esp_transport_handle_t t, char *buffer, int len, int timeout
         esp_transport_capture_errno(t, errno);
         if (errno == EAGAIN) {
             ret = ERR_TCP_TRANSPORT_CONNECTION_TIMEOUT;
+        } else {
+            ret = ERR_TCP_TRANSPORT_CONNECTION_FAILED;
         }
     } else if (ret == 0) {
         if (poll > 0) {
@@ -406,6 +410,12 @@ void esp_transport_ssl_skip_common_name_check(esp_transport_handle_t t)
 {
     GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
     ssl->cfg.skip_common_name = true;
+}
+
+void esp_transport_ssl_set_common_name(esp_transport_handle_t t, const char *common_name)
+{
+    GET_SSL_FROM_TRANSPORT_OR_RETURN(ssl, t);
+    ssl->cfg.common_name = common_name;
 }
 
 #ifdef CONFIG_ESP_TLS_USE_SECURE_ELEMENT

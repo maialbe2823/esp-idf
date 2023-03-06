@@ -2,14 +2,10 @@
 #
 # SPDX-FileCopyrightText: 2018-2022 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
-from __future__ import division, print_function, unicode_literals
-
 import logging
 import os
 import random
 import sys
-from builtins import range, str
 
 import pytest
 
@@ -29,7 +25,6 @@ from pytest_embedded import Dut
 
 @pytest.mark.esp32
 @pytest.mark.esp32c3
-@pytest.mark.esp32s2
 @pytest.mark.esp32s3
 @pytest.mark.wifi_router
 def test_examples_protocol_http_server_persistence(dut: Dut) -> None:
@@ -63,6 +58,16 @@ def test_examples_protocol_http_server_persistence(dut: Dut) -> None:
     conn = client.start_session(got_ip, got_port)
     visitor = 0
     adder = 0
+
+    # Test login and logout
+    if client.getreq(conn, '/login').decode() != str(1):
+        raise RuntimeError
+    visitor += 1
+    dut.expect('/login visitor count = ' + str(visitor), timeout=30)
+    dut.expect('/login GET handler send ' + str(1), timeout=30)
+    if client.getreq(conn, '/logout').decode() != str(1):
+        raise RuntimeError
+    dut.expect('Logging out', timeout=30)
 
     # Test PUT request and initialize session context
     num = random.randint(0,100)

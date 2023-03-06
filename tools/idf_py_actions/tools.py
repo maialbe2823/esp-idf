@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import os
@@ -8,14 +8,24 @@ import sys
 from asyncio.subprocess import Process
 from io import open
 from types import FunctionType
-from typing import Any, Dict, List, Optional, TextIO, Tuple, Union
+from typing import Any, Dict, Generator, List, Match, Optional, TextIO, Tuple, Union
 
 import click
 import yaml
-from idf_monitor_base.output_helpers import yellow_print
+from idf_py_actions.errors import NoSerialPortFoundError
 
 from .constants import GENERATORS
 from .errors import FatalError
+
+# Name of the program, normally 'idf.py'.
+# Can be overridden from idf.bat using IDF_PY_PROGRAM_NAME
+PROG = os.getenv('IDF_PY_PROGRAM_NAME', 'idf.py')
+
+# environment variable used during click shell completion run
+SHELL_COMPLETE_VAR = '_IDF.PY_COMPLETE'
+
+# was shell completion invoked?
+SHELL_COMPLETE_RUN = SHELL_COMPLETE_VAR in os.environ
 
 
 def executable_exists(args: List) -> bool:
@@ -25,16 +35,6 @@ def executable_exists(args: List) -> bool:
 
     except Exception:
         return False
-
-
-def realpath(path: str) -> str:
-    """
-    Return the cannonical path with normalized case.
-
-    It is useful on Windows to comparision paths in case-insensitive manner.
-    On Unix and Mac OS X it works as `os.path.realpath()` only.
-    """
-    return os.path.normcase(os.path.realpath(path))
 
 
 def _idf_version_from_cmake() -> Optional[str]:
@@ -79,7 +79,60 @@ def idf_version() -> Optional[str]:
     return version
 
 
-def print_hints(*filenames: str) -> None:
+def get_default_serial_port() -> Any:
+    # Import is done here in order to move it after the check_environment()
+    # ensured that pyserial has been installed
+    try:
+        import esptool
+        import serial.tools.list_ports
+        ports = list(sorted(p.device for p in serial.tools.list_ports.comports()))
+        # high baud rate could cause the failure of creation of the connection
+        esp = esptool.get_default_connected_device(serial_list=ports, port=None, connect_attempts=4,
+                                                   initial_baud=115200)
+        if esp is None:
+            raise NoSerialPortFoundError(
+                "No serial ports found. Connect a device, or use '-p PORT' option to set a specific port.")
+
+        serial_port = esp.serial_port
+        esp._port.close()
+
+        return serial_port
+
+    except NoSerialPortFoundError:
+        raise
+    except Exception as e:
+        raise FatalError('An exception occurred during detection of the serial port: {}'.format(e))
+
+
+# function prints warning when autocompletion is not being performed
+# set argument stream to sys.stderr for errors and exceptions
+def print_warning(message: str, stream: TextIO=None) -> None:
+    if not SHELL_COMPLETE_RUN:
+        print(message, file=stream or sys.stderr)
+
+
+def color_print(message: str, color: str, newline: Optional[str]='\n') -> None:
+    """ Print a message to stderr with colored highlighting """
+    ansi_normal = '\033[0m'
+    sys.stderr.write('%s%s%s%s' % (color, message, ansi_normal, newline))
+    sys.stderr.flush()
+
+
+def yellow_print(message: str, newline: Optional[str]='\n') -> None:
+    ansi_yellow = '\033[0;33m'
+    color_print(message, ansi_yellow, newline)
+
+
+def red_print(message: str, newline: Optional[str]='\n') -> None:
+    ansi_red = '\033[1;31m'
+    color_print(message, ansi_red, newline)
+
+
+def debug_print_idf_version() -> None:
+    print_warning(f'ESP-IDF {idf_version() or "version unknown"}')
+
+
+def generate_hints(*filenames: str) -> Generator:
     """Getting output files and printing hints on how to resolve errors based on the output."""
     with open(os.path.join(os.path.dirname(__file__), 'hints.yml'), 'r') as file:
         hints = yaml.safe_load(file)
@@ -87,16 +140,36 @@ def print_hints(*filenames: str) -> None:
         with open(file_name, 'r') as file:
             output = ' '.join(line.strip() for line in file if line.strip())
         for hint in hints:
+            variables_list = hint.get('variables')
+            hint_list, hint_vars, re_vars = [], [], []
+            match: Optional[Match[str]] = None
             try:
-                match = re.compile(hint['re']).findall(output)
-            except KeyError:
-                raise KeyError("Argument 're' missing in {}. Check hints.yml file.".format(hint))
+                if variables_list:
+                    for variables in variables_list:
+                        hint_vars = variables['hint_variables']
+                        re_vars = variables['re_variables']
+                        regex = hint['re'].format(*re_vars)
+                        if re.compile(regex).search(output):
+                            try:
+                                hint_list.append(hint['hint'].format(*hint_vars))
+                            except KeyError as e:
+                                red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
+                                sys.exit(1)
+                else:
+                    match = re.compile(hint['re']).search(output)
+            except KeyError as e:
+                red_print('Argument {} missing in {}. Check hints.yml file.'.format(e, hint))
+                sys.exit(1)
             except re.error as e:
-                raise re.error('{} from hints.yml have {} problem. Check hints.yml file.'.format(hint['re'], e))
-            if match:
-                extra_info = ', '.join(match) if hint.get('match_to_output', '') else ''
+                red_print('{} from hints.yml have {} problem. Check hints.yml file.'.format(hint['re'], e))
+                sys.exit(1)
+            if hint_list:
+                for message in hint_list:
+                    yield ' '.join(['HINT:', message])
+            elif match:
+                extra_info = ', '.join(match.groups()) if hint.get('match_to_output', '') else ''
                 try:
-                    yellow_print(' '.join(['HINT:', hint['hint'].format(extra_info)]))
+                    yield ' '.join(['HINT:', hint['hint'].format(extra_info)])
                 except KeyError:
                     raise KeyError("Argument 'hint' missing in {}. Check hints.yml file.".format(hint))
 
@@ -117,7 +190,7 @@ def fit_text_in_terminal(out: str) -> str:
 
 class RunTool:
     def __init__(self, tool_name: str, args: List, cwd: str, env: Dict=None, custom_error_handler: FunctionType=None, build_dir: str=None,
-                 hints: bool=False, force_progression: bool=False, interactive: bool=False) -> None:
+                 hints: bool=True, force_progression: bool=False, interactive: bool=False) -> None:
         self.tool_name = tool_name
         self.args = args
         self.cwd = cwd
@@ -158,7 +231,8 @@ class RunTool:
             return
 
         if stderr_output_file and stdout_output_file:
-            print_hints(stderr_output_file, stdout_output_file)
+            for hint in generate_hints(stderr_output_file, stdout_output_file):
+                yellow_print(hint)
             raise FatalError('{} failed with exit code {}, output of the command is in the {} and {}'.format(self.tool_name, process.returncode,
                              stderr_output_file, stdout_output_file))
 
@@ -185,24 +259,16 @@ class RunTool:
         if p.stderr and p.stdout:  # it only to avoid None type in p.std
             await asyncio.gather(
                 self.read_and_write_stream(p.stderr, stderr_output_file, sys.stderr),
-                self.read_and_write_stream(p.stdout, stdout_output_file))
+                self.read_and_write_stream(p.stdout, stdout_output_file, sys.stdout))
         await p.wait()  # added for avoiding None returncode
         return p, stderr_output_file, stdout_output_file
 
     async def read_and_write_stream(self, input_stream: asyncio.StreamReader, output_filename: str,
-                                    output_stream: TextIO=sys.stdout) -> None:
+                                    output_stream: TextIO) -> None:
         """read the output of the `input_stream` and then write it into `output_filename` and `output_stream`"""
         def delete_ansi_escape(text: str) -> str:
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             return ansi_escape.sub('', text)
-
-        def prepare_for_print(out: bytes) -> str:
-            # errors='ignore' is here because some chips produce some garbage bytes
-            result = out.decode(errors='ignore')
-            if not output_stream.isatty():
-                # delete escape sequence if we printing in environments where ANSI coloring is disabled
-                return delete_ansi_escape(result)
-            return result
 
         def print_progression(output: str) -> None:
             # Print a new line on top of the previous line
@@ -210,20 +276,51 @@ class RunTool:
             print('\r', end='')
             print(fit_text_in_terminal(output.strip('\n\r')), end='', file=output_stream)
 
+        async def read_stream() -> Optional[str]:
+            try:
+                output_b = await input_stream.readline()
+                return output_b.decode(errors='ignore')
+            except (asyncio.LimitOverrunError, asyncio.IncompleteReadError) as e:
+                print(e, file=sys.stderr)
+                return None
+            except AttributeError:
+                return None
+
+        async def read_interactive_stream() -> Optional[str]:
+            buffer = b''
+            while True:
+                output_b = await input_stream.read(1)
+                if not output_b:
+                    return None
+                try:
+                    return (buffer + output_b).decode()
+                except UnicodeDecodeError:
+                    buffer += output_b
+                    if len(buffer) > 4:
+                        # Multi-byte character contain up to 4 bytes and if buffer have more then 4 bytes
+                        # and still can not decode it we can just ignore some bytes
+                        return buffer.decode(errors='ignore')
+
         try:
-            with open(output_filename, 'w') as output_file:
+            with open(output_filename, 'w', encoding='utf8') as output_file:
                 while True:
                     if self.interactive:
-                        out = await input_stream.read(1)
+                        output = await read_interactive_stream()
                     else:
-                        out = await input_stream.readline()
-                    if not out:
+                        output = await read_stream()
+                    if not output:
                         break
-                    output = prepare_for_print(out)
-                    output_file.write(output)
+                    output_noescape = delete_ansi_escape(output)
+                    # Always remove escape sequences when writing the build log.
+                    output_file.write(output_noescape)
+                    # If idf.py output is redirected and the output stream is not a TTY,
+                    # strip the escape sequences as well.
+                    # (There shouldn't be any, but just in case.)
+                    if not output_stream.isatty():
+                        output = output_noescape
 
-                    # print output in progression way but only the progression related (that started with '[') and if verbose flag is not set
                     if self.force_progression and output[0] == '[' and '-v' not in self.args and output_stream.isatty():
+                        # print output in progression way but only the progression related (that started with '[') and if verbose flag is not set
                         print_progression(output)
                     else:
                         output_stream.write(output)
@@ -234,23 +331,29 @@ class RunTool:
 
 
 def run_tool(*args: Any, **kwargs: Any) -> None:
-    # Added in case some one use run_tool externally in a idf.py extensions
+    # Added in case someone uses run_tool externally in idf.py extensions
     return RunTool(*args, **kwargs)()
 
 
 def run_target(target_name: str, args: 'PropertyDict', env: Optional[Dict]=None,
-               custom_error_handler: FunctionType=None, force_progression: bool=False, hints: bool=False, interactive: bool=False) -> None:
+               custom_error_handler: FunctionType=None, force_progression: bool=False, interactive: bool=False) -> None:
     """Run target in build directory."""
     if env is None:
         env = {}
 
     generator_cmd = GENERATORS[args.generator]['command']
-    env.update(GENERATORS[args.generator]['envvar'])
 
     if args.verbose:
         generator_cmd += [GENERATORS[args.generator]['verbose_flag']]
 
-    RunTool(generator_cmd[0], generator_cmd + [target_name], args.build_dir, env, custom_error_handler, hints=hints,
+    # By default, GNU Make and Ninja strip away color escape sequences when they see that their stdout is redirected.
+    # If idf.py's stdout is not redirected, the final output is a TTY, so we can tell Make/Ninja to disable stripping
+    # of color escape sequences. (Requires Ninja v1.9.0 or later.)
+    if sys.stdout.isatty():
+        if 'CLICOLOR_FORCE' not in env:
+            env['CLICOLOR_FORCE'] = '1'
+
+    RunTool(generator_cmd[0], generator_cmd + [target_name], args.build_dir, env, custom_error_handler, hints=not args.no_hints,
             force_progression=force_progression, interactive=interactive)()
 
 
@@ -317,6 +420,11 @@ def ensure_build_directory(args: 'PropertyDict', prog_name: str, always_run_cmak
     the build directory, an error is raised. If the parameter is None, this function will set it to
     an auto-detected default generator or to the value already configured in the build directory.
     """
+
+    if not executable_exists(['cmake', '--version']):
+        debug_print_idf_version()
+        raise FatalError(f'"cmake" must be available on the PATH to use {PROG}')
+
     project_dir = args.project_dir
     # Verify the project directory
     if not os.path.isdir(project_dir):
@@ -350,6 +458,7 @@ def ensure_build_directory(args: 'PropertyDict', prog_name: str, always_run_cmak
                 '-G',
                 args.generator,
                 '-DPYTHON_DEPS_CHECKED=1',
+                '-DPYTHON={}'.format(sys.executable),
                 '-DESP_PLATFORM=1',
             ]
             if args.cmake_warn_uninitialized:
@@ -383,12 +492,21 @@ def ensure_build_directory(args: 'PropertyDict', prog_name: str, always_run_cmak
 
     try:
         home_dir = cache['CMAKE_HOME_DIRECTORY']
-        if realpath(home_dir) != realpath(project_dir):
+        if os.path.realpath(home_dir) != os.path.realpath(project_dir):
             raise FatalError(
                 "Build directory '%s' configured for project '%s' not '%s'. Run '%s fullclean' to start again." %
-                (build_dir, realpath(home_dir), realpath(project_dir), prog_name))
+                (build_dir, os.path.realpath(home_dir), os.path.realpath(project_dir), prog_name))
     except KeyError:
         pass  # if cmake failed part way, CMAKE_HOME_DIRECTORY may not be set yet
+
+    try:
+        python = cache['PYTHON']
+        if python != sys.executable:
+            raise FatalError(
+                "'{}' is currently active in the environment while the project was configured with '{}'. "
+                "Run '{} fullclean' to start again.".format(sys.executable, python, prog_name))
+    except KeyError:
+        pass
 
 
 def merge_action_lists(*action_lists: Dict) -> Dict:

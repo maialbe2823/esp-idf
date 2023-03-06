@@ -11,7 +11,7 @@ ULP RISC-V 协处理器代码以 C 语言（或汇编语言）编写，使用基
 
 如果您已依照 :doc:`快速入门指南 <../../../get-started/index>` 中的介绍安装好了 ESP-IDF 及其 CMake 构建系统，那么 ULP RISC-V 工具链已经被默认安装到了您的开发环境中。
 
-.. note: 在早期版本的 ESP-IDF 中，RISC-V 工具链具有不同的名称：`riscv-none-embed-gcc`。
+.. note:: 在早期版本的 ESP-IDF 中，RISC-V 工具链具有不同的名称：`riscv-none-embed-gcc`。
 
 编译 ULP RISC-V 代码
 -----------------------------
@@ -20,7 +20,7 @@ ULP RISC-V 协处理器代码以 C 语言（或汇编语言）编写，使用基
 
 1. ULP RISC-V 代码以 C 语言或汇编语言编写（必须使用 `.S` 扩展名)，必须放在组件目录中一个独立的目录中，例如 `ulp/`。
 
-.. note: 当注册组件时（通过 ``idf_component_register``），该目录不应被添加至 ``SRC_DIRS`` 参数，因为目前该步骤需用于 ULP FSM。如何正确添加 ULP 源文件，请见以下步骤。
+.. note:: 当注册组件时（通过 ``idf_component_register``），该目录不应被添加至 ``SRC_DIRS`` 参数，因为目前该步骤需用于 ULP FSM。如何正确添加 ULP 源文件，请见以下步骤。
 
 2. 注册后从组件 CMakeLists.txt 中调用 ``ulp_embed_binary`` 示例如下::
 
@@ -98,6 +98,18 @@ ULP RISC-V 协处理器代码以 C 语言（或汇编语言）编写，使用基
         ulp_measurement_count = 64;
     }
 
+互斥
+^^^^^^^
+
+如果想要互斥地访问被主程序和 ULP 程序共享的变量，则可以通过 ULP RISC-V Lock API 来实现：
+
+ * :cpp:func:`ulp_riscv_lock_acquire`
+ * :cpp:func:`ulp_riscv_lock_release`
+
+ULP 中的所有硬件指令都不支持互斥，所以 Lock API 需通过一种软件算法（`Peterson 算法 <https://zh.wikipedia.org/wiki/Peterson%E7%AE%97%E6%B3%95>`_ ）来实现互斥。
+
+注意，只能从主程序的单个线程中调用这些锁，如果多个线程同时调用，将无法启用互斥功能。
+
 启动 ULP RISC-V 程序
 -------------------------------
 
@@ -152,7 +164,6 @@ ULP RISC-V 协处理器由定时器启动，调用 :cpp:func:`ulp_riscv_run` 即
 
  * 陷阱信号：ULP RISC-V 有一个硬件陷阱，将在特定条件下触发，例如非法指令。这将导致主 CPU 被 :cpp:enumerator:`ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG` 唤醒。
 
-
 应用示例
 --------------------
 
@@ -164,3 +175,5 @@ API 参考
 -------------
 
 .. include-build-file:: inc/ulp_riscv.inc
+.. include-build-file:: inc/ulp_riscv_lock_shared.inc
+.. include-build-file:: inc/ulp_riscv_lock.inc

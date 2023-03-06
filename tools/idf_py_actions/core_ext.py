@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import fnmatch
 import json
@@ -18,8 +18,8 @@ from click.core import Context
 from idf_py_actions.constants import GENERATORS, PREVIEW_TARGETS, SUPPORTED_TARGETS, URL_TO_DOC
 from idf_py_actions.errors import FatalError
 from idf_py_actions.global_options import global_options
-from idf_py_actions.tools import (PropertyDict, TargetChoice, ensure_build_directory, get_target, idf_version,
-                                  merge_action_lists, print_hints, realpath, run_target)
+from idf_py_actions.tools import (PropertyDict, TargetChoice, ensure_build_directory, generate_hints, get_target,
+                                  idf_version, merge_action_lists, run_target, yellow_print)
 
 
 def action_extensions(base_actions: Dict, project_path: str) -> Any:
@@ -30,25 +30,27 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         Calls ensure_build_directory() which will run cmake to generate a build
         directory (with the specified generator) as needed.
         """
-        hints = not args.no_hints
         ensure_build_directory(args, ctx.info_name)
-        run_target(target_name, args, force_progression=GENERATORS[args.generator].get('force_progression', False), hints=hints)
+        run_target(target_name, args, force_progression=GENERATORS[args.generator].get('force_progression', False))
 
-    def size_target(target_name: str, ctx: Context, args: PropertyDict) -> None:
+    def size_target(target_name: str, ctx: Context, args: PropertyDict, output_format: str, output_file: str) -> None:
         """
         Builds the app and then executes a size-related target passed in 'target_name'.
         `tool_error_handler` handler is used to suppress errors during the build,
         so size action can run even in case of overflow.
-
         """
 
         def tool_error_handler(e: int, stdout: str, stderr: str) -> None:
-            print_hints(stdout, stderr)
+            for hint in generate_hints(stdout, stderr):
+                yellow_print(hint)
 
-        hints = not args.no_hints
+        os.environ['SIZE_OUTPUT_FORMAT'] = output_format
+        if output_file:
+            os.environ['SIZE_OUTPUT_FILE'] = os.path.abspath(output_file)
+
         ensure_build_directory(args, ctx.info_name)
         run_target('all', args, force_progression=GENERATORS[args.generator].get('force_progression', False),
-                   custom_error_handler=tool_error_handler, hints=hints)
+                   custom_error_handler=tool_error_handler)
         run_target(target_name, args)
 
     def list_build_system_targets(target_name: str, ctx: Context, args: PropertyDict) -> None:
@@ -166,14 +168,14 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         ensure_build_directory(args, ctx.info_name, True)
 
     def validate_root_options(ctx: Context, args: PropertyDict, tasks: List) -> None:
-        args.project_dir = realpath(args.project_dir)
-        if args.build_dir is not None and args.project_dir == realpath(args.build_dir):
+        args.project_dir = os.path.realpath(args.project_dir)
+        if args.build_dir is not None and args.project_dir == os.path.realpath(args.build_dir):
             raise FatalError(
                 'Setting the build directory to the project directory is not supported. Suggest dropping '
                 "--build-dir option, the default is a 'build' subdirectory inside the project directory.")
         if args.build_dir is None:
             args.build_dir = os.path.join(args.project_dir, 'build')
-        args.build_dir = realpath(args.build_dir)
+        args.build_dir = os.path.realpath(args.build_dir)
 
     def idf_version_callback(ctx: Context, param: str, value: str) -> None:
         if not value or ctx.resilient_parsing:
@@ -338,6 +340,16 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         'global_action_callbacks': [validate_root_options],
     }
 
+    # 'default' is introduced instead of simply setting 'text' as the default so that we know
+    # if the user explicitly specified the format or not. If the format is not specified, then
+    # the legacy OUTPUT_JSON CMake variable will be taken into account.
+    size_options = [{'names': ['--format', 'output_format'],
+                     'type': click.Choice(['default', 'text', 'csv', 'json']),
+                     'help': 'Specify output format: text (same as "default"), csv or json.',
+                     'default': 'default'},
+                    {'names': ['--output-file', 'output_file'],
+                     'help': 'Print output to the specified file instead of to the standard output'}]
+
     build_actions = {
         'actions': {
             'all': {
@@ -390,17 +402,17 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
             'size': {
                 'callback': size_target,
                 'help': 'Print basic size information about the app.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'size-components': {
                 'callback': size_target,
                 'help': 'Print per-component size information.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'size-files': {
                 'callback': size_target,
                 'help': 'Print per-source-file size information.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'bootloader': {
                 'callback': build_target,

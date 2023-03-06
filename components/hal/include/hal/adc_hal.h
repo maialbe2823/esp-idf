@@ -84,18 +84,10 @@ typedef struct adc_hal_digi_ctrlr_cfg_t {
     uint32_t                    sample_freq_hz;     //ADC sample frequency
     adc_digi_convert_mode_t     conv_mode;          //controller work mode
     uint32_t                    bit_width;          //output data width
+    adc_continuous_clk_src_t    clk_src;            ///< Clock source
+    uint32_t                    clk_src_freq_hz;    ///< Clock source frequency in hz
 } adc_hal_digi_ctrlr_cfg_t;
 
-
-/*---------------------------------------------------------------
-                    Common setting
----------------------------------------------------------------*/
-/**
- * Set ADC module power management.
- *
- * @prarm manage Set ADC power status.
- */
-#define adc_hal_set_power_manage(manage) adc_ll_set_power_manage(manage)
 
 /*---------------------------------------------------------------
                     PWDET(Power detect) controller setting
@@ -115,20 +107,6 @@ typedef struct adc_hal_digi_ctrlr_cfg_t {
  * @return cct Range: 0 ~ 7.
  */
 #define adc_hal_pwdet_get_cct() adc_ll_pwdet_get_cct()
-
-/**
- *  Enable/disable the output of ADCn's internal reference voltage to one of ADC2's channels.
- *
- *  This function routes the internal reference voltage of ADCn to one of
- *  ADC2's channels. This reference voltage can then be manually measured
- *  for calibration purposes.
- *
- *  @note  ESP32 only supports output of ADC2's internal reference voltage.
- *  @param[in]  adc ADC unit select
- *  @param[in]  channel ADC2 channel number
- *  @param[in]  en Enable/disable the reference voltage output
- */
-#define adc_hal_vref_output(adc, channel, en) adc_ll_vref_output(adc, channel, en)
 
 /*---------------------------------------------------------------
                     Digital controller setting

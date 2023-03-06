@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -44,13 +44,13 @@ static esp_err_t mcpwm_comparator_register_to_operator(mcpwm_cmpr_t *cmpr, mcpwm
     ESP_RETURN_ON_FALSE(cmpr_id >= 0, ESP_ERR_NOT_FOUND, TAG, "no free comparator in operator (%d,%d)", oper->group->group_id, oper->oper_id);
 
     cmpr->cmpr_id = cmpr_id;
-    cmpr->operator = oper;
+    cmpr->oper = oper;
     return ESP_OK;
 }
 
 static void mcpwm_comparator_unregister_from_operator(mcpwm_cmpr_t *cmpr)
 {
-    mcpwm_oper_t *oper = cmpr->operator;
+    mcpwm_oper_t *oper = cmpr->oper;
     int cmpr_id = cmpr->cmpr_id;
 
     portENTER_CRITICAL(&oper->spinlock);
@@ -58,12 +58,12 @@ static void mcpwm_comparator_unregister_from_operator(mcpwm_cmpr_t *cmpr)
     portEXIT_CRITICAL(&oper->spinlock);
 }
 
-static esp_err_t mcpwm_comparator_destory(mcpwm_cmpr_t *cmpr)
+static esp_err_t mcpwm_comparator_destroy(mcpwm_cmpr_t *cmpr)
 {
     if (cmpr->intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(cmpr->intr), TAG, "uninstall interrupt service failed");
     }
-    if (cmpr->operator) {
+    if (cmpr->oper) {
         mcpwm_comparator_unregister_from_operator(cmpr);
     }
     free(cmpr);
@@ -97,7 +97,7 @@ esp_err_t mcpwm_new_comparator(mcpwm_oper_handle_t oper, const mcpwm_comparator_
 
 err:
     if (cmpr) {
-        mcpwm_comparator_destory(cmpr);
+        mcpwm_comparator_destroy(cmpr);
     }
     return ret;
 }
@@ -105,10 +105,10 @@ err:
 esp_err_t mcpwm_del_comparator(mcpwm_cmpr_handle_t cmpr)
 {
     ESP_RETURN_ON_FALSE(cmpr, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    mcpwm_oper_t *operator= cmpr->operator;
-    mcpwm_group_t *group = operator->group;
+    mcpwm_oper_t *oper = cmpr->oper;
+    mcpwm_group_t *group = oper->group;
     mcpwm_hal_context_t *hal = &group->hal;
-    int oper_id = operator->oper_id;
+    int oper_id = oper->oper_id;
     int cmpr_id = cmpr->cmpr_id;
 
     portENTER_CRITICAL(&group->spinlock);
@@ -118,18 +118,18 @@ esp_err_t mcpwm_del_comparator(mcpwm_cmpr_handle_t cmpr)
 
     ESP_LOGD(TAG, "del comparator (%d,%d,%d)", group->group_id, oper_id, cmpr_id);
     // recycle memory resource
-    ESP_RETURN_ON_ERROR(mcpwm_comparator_destory(cmpr), TAG, "destory comparator failed");
+    ESP_RETURN_ON_ERROR(mcpwm_comparator_destroy(cmpr), TAG, "destroy comparator failed");
     return ESP_OK;
 }
 
 esp_err_t mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_t cmpr, uint32_t cmp_ticks)
 {
-    ESP_RETURN_ON_FALSE(cmpr, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    mcpwm_oper_t *oper = cmpr->operator;
+    ESP_RETURN_ON_FALSE_ISR(cmpr, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    mcpwm_oper_t *oper = cmpr->oper;
     mcpwm_group_t *group = oper->group;
     mcpwm_timer_t *timer = oper->timer;
-    ESP_RETURN_ON_FALSE(timer, ESP_ERR_INVALID_STATE, TAG, "timer and operator are not connected");
-    ESP_RETURN_ON_FALSE(cmp_ticks < timer->peak_ticks, ESP_ERR_INVALID_ARG, TAG, "compare value out of range");
+    ESP_RETURN_ON_FALSE_ISR(timer, ESP_ERR_INVALID_STATE, TAG, "timer and operator are not connected");
+    ESP_RETURN_ON_FALSE_ISR(cmp_ticks <= timer->peak_ticks, ESP_ERR_INVALID_ARG, TAG, "compare value out of range");
 
     portENTER_CRITICAL_SAFE(&cmpr->spinlock);
     mcpwm_ll_operator_set_compare_value(group->hal.dev, oper->oper_id, cmpr->cmpr_id, cmp_ticks);
@@ -142,14 +142,14 @@ esp_err_t mcpwm_comparator_set_compare_value(mcpwm_cmpr_handle_t cmpr, uint32_t 
 esp_err_t mcpwm_comparator_register_event_callbacks(mcpwm_cmpr_handle_t cmpr, const mcpwm_comparator_event_callbacks_t *cbs, void *user_data)
 {
     ESP_RETURN_ON_FALSE(cmpr && cbs, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    mcpwm_oper_t *oper = cmpr->operator;
+    mcpwm_oper_t *oper = cmpr->oper;
     mcpwm_group_t *group = oper->group;
     mcpwm_hal_context_t *hal = &group->hal;
     int group_id = group->group_id;
     int oper_id = oper->oper_id;
     int cmpr_id = cmpr->cmpr_id;
 
-#if CONFIG_MCWPM_ISR_IRAM_SAFE
+#if CONFIG_MCPWM_ISR_IRAM_SAFE
     if (cbs->on_reach) {
         ESP_RETURN_ON_FALSE(esp_ptr_in_iram(cbs->on_reach), ESP_ERR_INVALID_ARG, TAG, "on_reach callback not in IRAM");
     }
@@ -160,7 +160,7 @@ esp_err_t mcpwm_comparator_register_event_callbacks(mcpwm_cmpr_handle_t cmpr, co
 
     // lazy install interrupt service
     if (!cmpr->intr) {
-        // we want the interrupt servie to be enabled after allocation successfully
+        // we want the interrupt service to be enabled after allocation successfully
         int isr_flags = MCPWM_INTR_ALLOC_FLAG & ~ ESP_INTR_FLAG_INTRDISABLED;
         ESP_RETURN_ON_ERROR(esp_intr_alloc_intrstatus(mcpwm_periph_signals.groups[group_id].irq_id, isr_flags,
                             (uint32_t)mcpwm_ll_intr_get_status_reg(hal->dev), MCPWM_LL_EVENT_CMP_EQUAL(oper_id, cmpr_id),
@@ -180,7 +180,8 @@ esp_err_t mcpwm_comparator_register_event_callbacks(mcpwm_cmpr_handle_t cmpr, co
 static void IRAM_ATTR mcpwm_comparator_default_isr(void *args)
 {
     mcpwm_cmpr_t *cmpr = (mcpwm_cmpr_t *)args;
-    mcpwm_oper_t *oper = cmpr->operator;
+    mcpwm_oper_t *oper = cmpr->oper;
+    mcpwm_timer_t *timer = oper->timer;
     mcpwm_group_t *group = oper->group;
     mcpwm_hal_context_t *hal = &group->hal;
     int oper_id = oper->oper_id;
@@ -192,7 +193,7 @@ static void IRAM_ATTR mcpwm_comparator_default_isr(void *args)
 
     mcpwm_compare_event_data_t edata = {
         .compare_ticks = cmpr->compare_ticks,
-        // .direction = TODO
+        .direction = mcpwm_ll_timer_get_count_direction(hal->dev, timer->timer_id),
     };
 
     if (status & MCPWM_LL_EVENT_CMP_EQUAL(oper_id, cmpr_id)) {

@@ -13,8 +13,10 @@
 #include "soc/adc_periph.h"
 #include "soc/rtc_io_struct.h"
 #include "soc/sens_struct.h"
+#include "soc/sens_reg.h"
 #include "soc/syscon_struct.h"
 #include "soc/rtc_cntl_struct.h"
+#include "soc/clk_tree_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,20 +25,30 @@ extern "C" {
 #define ADC_LL_EVENT_ADC1_ONESHOT_DONE    (1 << 0)
 #define ADC_LL_EVENT_ADC2_ONESHOT_DONE    (1 << 1)
 
+/*---------------------------------------------------------------
+                    Oneshot
+---------------------------------------------------------------*/
+#define ADC_LL_DATA_INVERT_DEFAULT(PERIPH_NUM)         (1)
+#define ADC_LL_SAR_CLK_DIV_DEFAULT(PERIPH_NUM)         (2)
+
+/*---------------------------------------------------------------
+                    DMA
+---------------------------------------------------------------*/
+#define ADC_LL_DIGI_DATA_INVERT_DEFAULT(PERIPH_NUM)    (1)
+#define ADC_LL_FSM_RSTB_WAIT_DEFAULT                   (8)
+#define ADC_LL_FSM_START_WAIT_DEFAULT                  (ADC_LL_DIGI_SAR_CLK_DIV_DEFAULT)
+#define ADC_LL_FSM_STANDBY_WAIT_DEFAULT                (100)
+#define ADC_LL_SAMPLE_CYCLE_DEFAULT                    (2)
+#define ADC_LL_DIGI_SAR_CLK_DIV_DEFAULT                (16)
+
 //On esp32, ADC can only be continuously triggered when `ADC_LL_DEFAULT_CONV_LIMIT_EN == 1`, `ADC_LL_DEFAULT_CONV_LIMIT_NUM != 0`
 #define ADC_LL_DEFAULT_CONV_LIMIT_EN      1
 #define ADC_LL_DEFAULT_CONV_LIMIT_NUM     10
 
-typedef enum {
-    ADC_POWER_BY_FSM,   /*!< ADC XPD controlled by FSM. Used for polling mode */
-    ADC_POWER_SW_ON,    /*!< ADC XPD controlled by SW. power on. Used for DMA mode */
-    ADC_POWER_SW_OFF,   /*!< ADC XPD controlled by SW. power off. */
-    ADC_POWER_MAX,      /*!< For parameter check. */
-} adc_ll_power_t;
-
-typedef enum {
-    ADC_RTC_DATA_OK = 0,
-} adc_ll_rtc_raw_data_t;
+/*---------------------------------------------------------------
+                    PWDET (Power Detect)
+---------------------------------------------------------------*/
+#define ADC_LL_PWDET_CCT_DEFAULT                       (4)
 
 typedef enum {
     ADC_LL_CTRL_RTC   = 0,    ///< For ADC1 and ADC2. Select RTC controller.
@@ -551,24 +563,6 @@ static inline void adc_oneshot_ll_disable_all_unit(void)
 /*---------------------------------------------------------------
                     Common setting
 ---------------------------------------------------------------*/
-/**
- * Set ADC module power management.
- *
- * @param manage Set ADC power status.
- */
-static inline void adc_ll_set_power_manage(adc_ll_power_t manage)
-{
-    /* Bit1  0:Fsm  1: SW mode
-       Bit0  0:SW mode power down  1: SW mode power on */
-    if (manage == ADC_POWER_SW_ON) {
-        SENS.sar_meas_wait2.force_xpd_sar = SENS_FORCE_XPD_SAR_PU;
-    } else if (manage == ADC_POWER_BY_FSM) {
-        SENS.sar_meas_wait2.force_xpd_sar = SENS_FORCE_XPD_SAR_FSM;
-    } else if (manage == ADC_POWER_SW_OFF) {
-        SENS.sar_meas_wait2.force_xpd_sar = SENS_FORCE_XPD_SAR_PD;
-    }
-}
-
 /**
  * Set ADC module controller.
  * There are five SAR ADC controllers:

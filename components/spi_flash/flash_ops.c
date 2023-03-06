@@ -36,13 +36,16 @@
 #include "esp32s3/opi_flash_private.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/cache.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/cache.h"
+#elif CONFIG_IDF_TARGET_ESP32H4
+#include "esp32h4/rom/cache.h"
 #elif CONFIG_IDF_TARGET_ESP32C2
 #include "esp32c2/rom/cache.h"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#include "esp32c6/rom/cache.h"
 #endif
 #include "esp_rom_spiflash.h"
 #include "esp_flash_partitions.h"
+#include "esp_private/mspi_timing_tuning.h"
 #include "esp_private/cache_utils.h"
 #include "esp_flash.h"
 #include "esp_attr.h"
@@ -153,27 +156,35 @@ void IRAM_ATTR spi_flash_rom_impl_init(void)
 
 void IRAM_ATTR esp_mspi_pin_init(void)
 {
-#if CONFIG_ESPTOOLPY_OCT_FLASH || CONFIG_SPIRAM_MODE_OCT
-    esp_rom_opiflash_pin_config();
-    extern void spi_timing_set_pin_drive_strength(void);
-    spi_timing_set_pin_drive_strength();
-#else
+#if SOC_SPI_MEM_SUPPORT_OPI_MODE
+    bool octal_mspi_required = bootloader_flash_is_octal_mode_enabled();
+#if CONFIG_SPIRAM_MODE_OCT
+    octal_mspi_required |= true;
+#endif
+
+    if (octal_mspi_required) {
+        esp_rom_opiflash_pin_config();
+        mspi_timing_set_pin_drive_strength();
+    }
     //Set F4R4 board pin drive strength. TODO: IDF-3663
 #endif
 }
 
 esp_err_t IRAM_ATTR spi_flash_init_chip_state(void)
 {
-#if CONFIG_ESPTOOLPY_OCT_FLASH
-    return esp_opiflash_init(rom_spiflash_legacy_data->chip.device_id);
-#else
-#if CONFIG_IDF_TARGET_ESP32S3
-    // Currently, only esp32s3 allows high performance mode.
-    return spi_flash_enable_high_performance_mode();
-#else
-    return ESP_OK;
-#endif // CONFIG_IDF_TARGET_ESP32S3
-#endif // CONFIG_ESPTOOLPY_OCT_FLASH
+#if SOC_SPI_MEM_SUPPORT_OPI_MODE
+    if (bootloader_flash_is_octal_mode_enabled()) {
+        return esp_opiflash_init(rom_spiflash_legacy_data->chip.device_id);
+    } else
+#endif
+    {
+    #if CONFIG_IDF_TARGET_ESP32S3
+        // Currently, only esp32s3 allows high performance mode.
+        return spi_flash_enable_high_performance_mode();
+    #else
+        return ESP_OK;
+    #endif // CONFIG_IDF_TARGET_ESP32S3
+    }
 }
 
 #if CONFIG_SPI_FLASH_ENABLE_COUNTERS
@@ -205,14 +216,16 @@ void spi_flash_dump_counters(void)
 
 void IRAM_ATTR spi_flash_set_rom_required_regs(void)
 {
-#if CONFIG_ESPTOOLPY_OCT_FLASH
-    //Disable the variable dummy mode when doing timing tuning
-    CLEAR_PERI_REG_MASK(SPI_MEM_DDR_REG(1), SPI_MEM_SPI_FMEM_VAR_DUMMY);
-    /**
-     * STR /DTR mode setting is done every time when `esp_rom_opiflash_exec_cmd` is called
-     *
-     * Add any registers that are not set in ROM SPI flash functions here in the future
-     */
+#if SOC_SPI_MEM_SUPPORT_OPI_MODE
+    if (bootloader_flash_is_octal_mode_enabled()) {
+        //Disable the variable dummy mode when doing timing tuning
+        CLEAR_PERI_REG_MASK(SPI_MEM_DDR_REG(1), SPI_MEM_SPI_FMEM_VAR_DUMMY);
+        /**
+         * STR /DTR mode setting is done every time when `esp_rom_opiflash_exec_cmd` is called
+         *
+         * Add any registers that are not set in ROM SPI flash functions here in the future
+         */
+    }
 #endif
 }
 
@@ -220,14 +233,14 @@ void IRAM_ATTR spi_flash_set_rom_required_regs(void)
 // This function will only be called when Octal PSRAM enabled.
 void IRAM_ATTR spi_flash_set_vendor_required_regs(void)
 {
-#if CONFIG_ESPTOOLPY_OCT_FLASH
-    //Flash chip requires MSPI specifically, call this function to set them
-    esp_opiflash_set_required_regs();
-    SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 1, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
-#else
-    // Set back MSPI registers after Octal PSRAM initialization.
-    SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 0, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
-#endif // CONFIG_ESPTOOLPY_OCT_FLASH
+    if (bootloader_flash_is_octal_mode_enabled()) {
+        esp_opiflash_set_required_regs();
+        SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 1, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
+    } else {
+        //Flash chip requires MSPI specifically, call this function to set them
+        // Set back MSPI registers after Octal PSRAM initialization.
+        SET_PERI_REG_BITS(SPI_MEM_CACHE_FCTRL_REG(1), SPI_MEM_CACHE_USR_CMD_4BYTE_V, 0, SPI_MEM_CACHE_USR_CMD_4BYTE_S);
+    }
 }
 #endif
 

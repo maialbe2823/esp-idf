@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "esp_log.h"
 #include "esp_vfs_dev.h"
@@ -62,13 +63,14 @@ void app_main(void)
     repl_config.prompt = "esp32c3>";
 #elif CONFIG_IDF_TARGET_ESP32S3
     repl_config.prompt = "esp32s3>";
-#elif CONFIG_IDF_TARGET_ESP32H2
-    repl_config.prompt = "esp32h2>";
+#elif CONFIG_IDF_TARGET_ESP32H4
+    repl_config.prompt = "esp32h4>";
 #else
     repl_config.prompt = "esp32>";
 #endif
 
     // init console REPL environment
+    repl_config.max_history_len = 1;
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 
     /* Register commands */

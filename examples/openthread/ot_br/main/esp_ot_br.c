@@ -205,7 +205,12 @@ void app_main(void)
     // * task queue
     // * border router
     esp_vfs_eventfd_config_t eventfd_config = {
+#if CONFIG_OPENTHREAD_RADIO_NATIVE
+        // * radio driver (A native radio device needs a eventfd for radio driver.)
+        .max_fds = 4,
+#else
         .max_fds = 3,
+#endif
     };
     ESP_ERROR_CHECK(esp_vfs_eventfd_register(&eventfd_config));
 
@@ -213,6 +218,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+#if CONFIG_EXAMPLE_CONNECT_WIFI
 #if CONFIG_OPENTHREAD_BR_AUTO_START
     ESP_ERROR_CHECK(example_connect());
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
@@ -221,6 +227,13 @@ void app_main(void)
     esp_ot_wifi_netif_init();
     esp_openthread_set_backbone_netif(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"));
 #endif // CONFIG_OPENTHREAD_BR_AUTO_START
+#elif CONFIG_EXAMPLE_CONNECT_ETHERNET
+    ESP_ERROR_CHECK(example_connect());
+    esp_openthread_set_backbone_netif(get_example_netif());
+#else
+    ESP_LOGE(TAG, "ESP-Openthread has not set backbone netif");
+#endif // CONFIG_EXAMPLE_CONNECT_WIFI
+
     ESP_ERROR_CHECK(mdns_init());
     ESP_ERROR_CHECK(mdns_hostname_set("esp-ot-br"));
     xTaskCreate(ot_task_worker, "ot_br_main", 20480, xTaskGetCurrentTaskHandle(), 5, NULL);

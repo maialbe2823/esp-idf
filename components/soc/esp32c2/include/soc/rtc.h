@@ -90,12 +90,13 @@ extern "C" {
 #define RTC_CNTL_SCK_DCAP_DEFAULT   255
 
 /* Various delays to be programmed into power control state machines */
-#define RTC_CNTL_XTL_BUF_WAIT_SLP_US            (250)
+#define RTC_CNTL_XTL_BUF_WAIT_SLP_US            (1000)
 #define RTC_CNTL_PLL_BUF_WAIT_SLP_CYCLES        (1)
 #define RTC_CNTL_CK8M_WAIT_SLP_CYCLES           (4)
 #define RTC_CNTL_WAKEUP_DELAY_CYCLES            (5)
 #define RTC_CNTL_OTHER_BLOCKS_POWERUP_CYCLES    (1)
 #define RTC_CNTL_OTHER_BLOCKS_WAIT_CYCLES       (1)
+#define RTC_CNTL_MIN_SLP_VAL_MIN                (2)
 
 /*
 set sleep_init default param
@@ -103,6 +104,7 @@ set sleep_init default param
 #define RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_DEFAULT  5
 #define RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_NODROP  0
 #define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_DEFAULT  15
+#define RTC_CNTL_DBG_ATTEN_DEEPSLEEP_NODROP   0
 #define RTC_CNTL_DBG_ATTEN_MONITOR_DEFAULT  0
 #define RTC_CNTL_BIASSLP_MONITOR_DEFAULT  0
 #define RTC_CNTL_BIASSLP_SLEEP_ON  0
@@ -153,7 +155,10 @@ typedef struct rtc_cpu_freq_config_s {
 typedef enum {
     RTC_CAL_RTC_MUX = 0,       //!< Currently selected RTC SLOW_CLK
     RTC_CAL_8MD256 = 1,        //!< Internal 8 MHz RC oscillator, divided by 256
-    RTC_CAL_EXT_CLK = 2        //!< External CLK
+    RTC_CAL_32K_OSC_SLOW = 2,  //!< External 32.768 KHz CLK
+
+    // deprecated name
+    RTC_CAL_EXT_32K __attribute__((deprecated)) = RTC_CAL_32K_OSC_SLOW,
 } rtc_cal_sel_t;
 
 /**
@@ -179,7 +184,7 @@ typedef struct {
     .fast_clk_src = SOC_RTC_FAST_CLK_SRC_RC_FAST, \
     .slow_clk_src = SOC_RTC_SLOW_CLK_SRC_RC_SLOW, \
     .clk_rtc_clk_div = 0, \
-    .clk_8m_clk_div = 0, \
+    .clk_8m_clk_div = 1, \
     .slow_clk_dcap = RTC_CNTL_SCK_DCAP_DEFAULT, \
     .clk_8m_dfreq = RTC_CNTL_CK8M_DFREQ_DEFAULT, \
 }
@@ -403,6 +408,11 @@ uint32_t rtc_clk_cal_internal(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles);
  * 32k XTAL is being calibrated, but the oscillator has not started up (due to
  * incorrect loading capacitance, board design issue, or lack of 32 XTAL on board).
  *
+ * @note When 32k CLK is being calibrated, this function will check the accuracy
+ * of the clock. Since the xtal 32k or ext osc 32k is generally very stable, if
+ * the check fails, then consider this an invalid 32k clock and return 0. This
+ * check can filter some jamming signal.
+ *
  * @param cal_clk  clock to be measured
  * @param slow_clk_cycles  number of slow clock cycles to average
  * @return average slow clock period in microseconds, Q13.19 fixed point format,
@@ -449,10 +459,6 @@ uint64_t rtc_time_slowclk_to_us(uint64_t rtc_cycles, uint32_t period);
  * @return current value of RTC counter
  */
 uint64_t rtc_time_get(void);
-
-uint64_t rtc_light_slp_time_get(void);
-
-uint64_t rtc_deep_slp_time_get(void);
 
 /**
  * @brief Busy loop until next RTC_SLOW_CLK cycle
@@ -592,13 +598,6 @@ void rtc_sleep_init(rtc_sleep_config_t cfg);
  */
 void rtc_sleep_low_init(uint32_t slowclk_period);
 
-/**
- * @brief Set target value of RTC counter for RTC_TIMER_TRIG_EN wakeup source
- * @param t value of RTC counter at which wakeup from sleep will happen;
- *          only the lower 48 bits are used
- */
-void rtc_sleep_set_wakeup_time(uint64_t t);
-
 #define RTC_GPIO_TRIG_EN            BIT(2)  //!< GPIO wakeup
 #define RTC_TIMER_TRIG_EN           BIT(3)  //!< Timer wakeup
 #define RTC_WIFI_TRIG_EN            BIT(5)  //!< WIFI wakeup (light sleep only)
@@ -650,29 +649,6 @@ void rtc_sleep_set_wakeup_time(uint64_t t);
 uint32_t rtc_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt, uint32_t lslp_mem_inf_fpu);
 
 /**
- * @brief Enter deep sleep mode
- *
- * Similar to rtc_sleep_start(), but additionally uses hardware to calculate the CRC value
- * of RTC FAST memory. On wake, this CRC is used to determine if a deep sleep wake
- * stub is valid to execute (if a wake address is set).
- *
- * No RAM is accessed while calculating the CRC and going into deep sleep, which makes
- * this function safe to use even if the caller's stack is in RTC FAST memory.
- *
- * @note If no deep sleep wake stub address is set then calling rtc_sleep_start() will
- * have the same effect and takes less time as CRC calculation is skipped.
- *
- * @note This function should only be called after rtc_sleep_init() has been called to
- * configure the system for deep sleep.
- *
- * @param wakeup_opt - same as for rtc_sleep_start
- * @param reject_opt - same as for rtc_sleep_start
- *
- * @return non-zero if sleep was rejected by hardware
- */
-uint32_t rtc_deep_sleep_start(uint32_t wakeup_opt, uint32_t reject_opt);
-
-/**
  * RTC power and clock control initialization settings
  */
 typedef struct {
@@ -712,37 +688,6 @@ typedef struct {
  * @param cfg configuration options as rtc_config_t
  */
 void rtc_init(rtc_config_t cfg);
-
-/**
- * Structure describing vddsdio configuration
- */
-typedef struct {
-    uint32_t force : 1;     //!< If 1, use configuration from RTC registers; if 0, use EFUSE/bootstrapping pins.
-    uint32_t enable : 1;    //!< Enable VDDSDIO regulator
-    uint32_t tieh  : 1;     //!< Select VDDSDIO voltage. One of RTC_VDDSDIO_TIEH_1_8V, RTC_VDDSDIO_TIEH_3_3V
-    uint32_t drefh : 2;     //!< Tuning parameter for VDDSDIO regulator
-    uint32_t drefm : 2;     //!< Tuning parameter for VDDSDIO regulator
-    uint32_t drefl : 2;     //!< Tuning parameter for VDDSDIO regulator
-} rtc_vddsdio_config_t;
-
-/**
- * Get current VDDSDIO configuration
- * If VDDSDIO configuration is overridden by RTC, get values from RTC
- * Otherwise, if VDDSDIO is configured by EFUSE, get values from EFUSE
- * Otherwise, use default values and the level of MTDI bootstrapping pin.
- * @return currently used VDDSDIO configuration
- */
-rtc_vddsdio_config_t rtc_vddsdio_get_config(void);
-
-/**
- * Set new VDDSDIO configuration using RTC registers.
- * If config.force == 1, this overrides configuration done using bootstrapping
- * pins and EFUSE.
- *
- * @param config new VDDSDIO configuration
- */
-void rtc_vddsdio_set_config(rtc_vddsdio_config_t config);
-
 
 // -------------------------- CLOCK TREE DEFS ALIAS ----------------------------
 // **WARNING**: The following are only for backwards compatibility.

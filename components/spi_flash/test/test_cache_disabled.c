@@ -19,6 +19,8 @@
 
 #include "esp_private/cache_utils.h"
 
+//TODO: IDF-6730, migrate this test to test_app
+
 static QueueHandle_t result_queue;
 
 static IRAM_ATTR void cache_test_task(void *arg)
@@ -60,6 +62,11 @@ TEST_CASE("spi_flash_cache_enabled() works on both CPUs", "[spi_flash][esp_flash
 
 #if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2)
 
+#define C6_H2_ROM_IMPL    (CONFIG_SPI_FLASH_ROM_IMPL && (CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2))
+
+#if !C6_H2_ROM_IMPL
+//TODO: IDF-6931
+
 // This needs to sufficiently large array, otherwise it may end up in
 // DRAM (e.g. size <= 8 bytes && ARCH == RISCV)
 static const uint32_t s_in_rodata[8] = { 0x12345678, 0xfedcba98 };
@@ -82,10 +89,12 @@ static void IRAM_ATTR cache_access_test_func(void* arg)
 
 #if CONFIG_IDF_TARGET_ESP32
 #define CACHE_ERROR_REASON "Cache disabled,SW_RESET"
-#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32H2
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32H4
 #define CACHE_ERROR_REASON "Cache error,RTC_SW_CPU_RST"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #define CACHE_ERROR_REASON "Cache disabled,RTC_SW_CPU_RST"
+#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32H2
+#define CACHE_ERROR_REASON "Cache error,SW_CPU"
 #endif
 
 // These tests works properly if they resets the chip with the
@@ -95,6 +104,7 @@ TEST_CASE("invalid access to cache raises panic (PRO CPU)", "[spi_flash][reset="
     xTaskCreatePinnedToCore(&cache_access_test_func, "ia", 2048, NULL, 5, NULL, 0);
     vTaskDelay(1000/portTICK_PERIOD_MS);
 }
+#endif  //#if !C6_H2_ROM_IMPL
 
 #ifndef CONFIG_FREERTOS_UNICORE
 

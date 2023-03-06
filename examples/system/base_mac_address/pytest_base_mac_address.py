@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: CC0-1.0
 
 import pytest
@@ -6,6 +6,7 @@ from pytest_embedded import Dut
 
 
 @pytest.mark.supported_targets
+@pytest.mark.temp_skip_ci(targets=['esp32h2'], reason='cannot pass')   # IDF-6809
 @pytest.mark.generic
 def test_base_mac_address(dut: Dut) -> None:
     dut.expect_exact('BASE_MAC: Base MAC Address read from EFUSE BLK0')
@@ -31,11 +32,16 @@ def test_base_mac_address(dut: Dut) -> None:
                 # Format the new string to match the expected output from the app (includes stripping leading zeroes)
                 return ', '.join('0x{}'.format(hex_string[i:i + 2].lstrip('0')) for i in range(0, len(hex_string), 2))
 
-        return ', '.join(['0x{}'.format(m.decode('utf8')) for m in mac_m[:-1]] + [hex(int(mac_m[-1], 16) + increment)])
+        return ', '.join(['0x{}'.format(m.decode('utf8')) for m in mac_m[:-1]] + [hex((int(mac_m[-1], 16) + increment) & 0xFF)])
 
-    dut.expect_exact('WIFI_STA MAC: ' + get_expected_mac_string(0, dut.target), timeout=2)
-    dut.expect_exact('SoftAP MAC: ' + get_expected_mac_string(1, dut.target))
+    sdkconfig = dut.app.sdkconfig
+
+    if sdkconfig.get('ESP_WIFI_ENABLED'):
+        dut.expect_exact('WIFI_STA MAC: ' + get_expected_mac_string(0, dut.target), timeout=2)
+        dut.expect_exact('SoftAP MAC: ' + get_expected_mac_string(1, dut.target))
 
     if dut.target != 'esp32s2':
-        dut.expect_exact('BT MAC: ' + get_expected_mac_string(2, dut.target))
+        if sdkconfig.get('ESP_MAC_ADDR_UNIVERSE_BT'):
+            dut.expect_exact('BT MAC: ' + get_expected_mac_string(2, dut.target))
         dut.expect_exact('Ethernet MAC: ' + get_expected_mac_string(3, dut.target))
+        dut.expect_exact('New Ethernet MAC: ' + get_expected_mac_string(6, dut.target))

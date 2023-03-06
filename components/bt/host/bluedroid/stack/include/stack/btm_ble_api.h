@@ -385,7 +385,7 @@ typedef UINT8   tBTM_BLE_AD_TYPE;
 
 /* adv tx power level */
 #define BTM_BLE_ADV_TX_POWER_MIN        0           /* minimum tx power */
-#define BTM_BLE_ADV_TX_POWER_MAX        7           /* maximum tx power */
+#define BTM_BLE_ADV_TX_POWER_MAX        BTM_TX_POWER_LEVEL_MAX           /* maximum tx power */
 typedef UINT8 tBTM_BLE_ADV_TX_POWER;
 
 /* adv tx power in dBm */
@@ -767,7 +767,7 @@ typedef struct {
     tBLE_ADDR_TYPE peer_addr_type;
     BD_ADDR peer_addr;
     tBTM_BLE_AFP filter_policy;
-    UINT8 tx_power;
+    INT8 tx_power;
     tBTM_BLE_GAP_PHY primary_phy;
     UINT8 max_skip;
     tBTM_BLE_GAP_PHY secondary_phy;
@@ -1287,6 +1287,21 @@ typedef struct {
 typedef void (*tBTM_BLE_5_HCI_CBACK)(tBTM_BLE_5_GAP_EVENT event, tBTM_BLE_5_GAP_CB_PARAMS *params);
 
 #endif //#if (BLE_50_FEATURE_SUPPORT == TRUE)
+
+#if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
+typedef struct {
+    UINT8 status;
+    UINT16 conn_handle;
+    UINT16 service_data;
+    UINT16 sync_handle;
+    UINT8 adv_sid;
+    UINT8 adv_addr_type;
+    BD_ADDR adv_addr;
+    UINT8 adv_phy;
+    UINT16 period_adv_interval;
+    UINT8 adv_clk_accuracy;
+} tBTM_BLE_PERIOD_ADV_SYNC_TRANS_RECV;
+#endif // #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
 
 /*****************************************************************************
 **  EXTERNAL FUNCTION DECLARATIONS
@@ -1809,6 +1824,29 @@ void BTM_BleConfirmReply (BD_ADDR bd_addr, UINT8 res);
 //extern
 void BTM_BleOobDataReply(BD_ADDR bd_addr, UINT8 res, UINT8 len, UINT8 *p_data);
 
+/*******************************************************************************
+**
+** Function         BTM_BleSecureConnectionOobDataReply
+**
+** Description      This function is called to provide the OOB data for
+**                  SMP in response to BTM_LE_SC_OOB_REQ_EVT when secure connection
+**
+** Parameters:      bd_addr     - Address of the peer device
+**                  p_c         - pointer to Confirmation
+**                  p_r         - pointer to Randomizer
+**
+*******************************************************************************/
+void BTM_BleSecureConnectionOobDataReply(BD_ADDR bd_addr, UINT8 *p_c, UINT8 *p_r);
+
+/*******************************************************************************
+**
+** Function         BTM_BleSecureConnectionCreateOobData
+**
+** Description      This function is called to create the OOB data for
+**                  SMP when secure connection
+**
+*******************************************************************************/
+void BTM_BleSecureConnectionCreateOobData(void);
 
 /*******************************************************************************
 **
@@ -2614,7 +2652,12 @@ tBTM_STATUS BTM_BleSetExtendedScanParams(tBTM_BLE_EXT_SCAN_PARAMS *params);
 tBTM_STATUS BTM_BleExtendedScan(BOOLEAN enable, UINT16 duration, UINT16 period);
 
 void BTM_BleSetPreferExtenedConnParams(BD_ADDR bd_addr, tBTM_EXT_CONN_PARAMS *params);
-
 #endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
+
+#if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
+void BTM_BlePeriodicAdvSetInfoTrans(BD_ADDR bd_addr, UINT16 service_data, UINT8 adv_handle);
+
+void BTM_BleSetPeriodicAdvSyncTransParams(BD_ADDR bd_addr, UINT8 mode, UINT16 skip, UINT16 sync_timeout, UINT8 cte_type);
+#endif // #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
 
 #endif

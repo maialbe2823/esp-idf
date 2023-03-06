@@ -5,12 +5,14 @@
  */
 
 // DO NOT USE THESE APIS IN ANY APPLICATIONS
-// GDMA driver is not public for end users, but for ESP-IDF developpers.
+// GDMA driver is not public for end users, but for ESP-IDF developers.
 
 #pragma once
 
 #include <stdbool.h>
+#include "esp_etm.h"
 #include "soc/gdma_channel.h"
+#include "hal/gdma_types.h"
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -22,34 +24,6 @@ extern "C" {
  *
  */
 typedef struct gdma_channel_t *gdma_channel_handle_t;
-
-/**
- * @brief Enumeration of peripherals which have the DMA capability
- * @note Some peripheral might not be available on certain chip, please refer to `soc_caps.h` for detail.
- *
- */
-typedef enum {
-    GDMA_TRIG_PERIPH_M2M,  /*!< GDMA trigger peripheral: M2M */
-    GDMA_TRIG_PERIPH_UART, /*!< GDMA trigger peripheral: UART */
-    GDMA_TRIG_PERIPH_SPI,  /*!< GDMA trigger peripheral: SPI */
-    GDMA_TRIG_PERIPH_I2S,  /*!< GDMA trigger peripheral: I2S */
-    GDMA_TRIG_PERIPH_AES,  /*!< GDMA trigger peripheral: AES */
-    GDMA_TRIG_PERIPH_SHA,  /*!< GDMA trigger peripheral: SHA */
-    GDMA_TRIG_PERIPH_ADC,  /*!< GDMA trigger peripheral: ADC */
-    GDMA_TRIG_PERIPH_DAC,  /*!< GDMA trigger peripheral: DAC */
-    GDMA_TRIG_PERIPH_LCD,  /*!< GDMA trigger peripheral: LCD */
-    GDMA_TRIG_PERIPH_CAM,  /*!< GDMA trigger peripheral: CAM */
-    GDMA_TRIG_PERIPH_RMT,  /*!< GDMA trigger peripheral: RMT */
-} gdma_trigger_peripheral_t;
-
-/**
- * @brief Enumeration of GDMA channel direction
- *
- */
-typedef enum {
-    GDMA_CHANNEL_DIRECTION_TX, /*!< GDMA channel direction: TX */
-    GDMA_CHANNEL_DIRECTION_RX, /*!< GDMA channel direction: RX */
-} gdma_channel_direction_t;
 
 /**
  * @brief Collection of configuration items that used for allocating GDMA channel
@@ -124,13 +98,13 @@ typedef struct {
  */
 typedef struct {
     gdma_trigger_peripheral_t periph; /*!< Target peripheral which will trigger DMA operations */
-    int instance_id;                  /*!< Peripheral instance ID. Supported IDs are listed in `soc/gdma_channel.h`, e.g. SOC_GDMA_TRIG_PERIPH_UART0 */
+    int instance_id;                  /*!< Peripheral instance ID. Supported IDs are listed in `soc/gdma_channel.h`, e.g. SOC_GDMA_TRIG_PERIPH_UHCI0 */
 } gdma_trigger_t;
 
 /**
  * @brief Helper macro to initialize GDMA trigger
  * @note value of `peri` must be selected from `gdma_trigger_peripheral_t` enum.
- *       e.g. GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UART,0)
+ *       e.g. GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_I2S,0)
  *
  */
 #define GDMA_MAKE_TRIGGER(peri, id) \
@@ -324,6 +298,68 @@ esp_err_t gdma_append(gdma_channel_handle_t dma_chan);
  *      - ESP_FAIL: DMA channel reset failed due to other errors
  */
 esp_err_t gdma_reset(gdma_channel_handle_t dma_chan);
+
+/**
+ * @brief GDMA ETM event configuration
+ */
+typedef struct {
+    gdma_etm_event_type_t event_type; /*!< GDMA ETM event type */
+} gdma_etm_event_config_t;
+
+/**
+ * @brief Get the ETM event for GDMA channel
+ *
+ * @note The created ETM event object can be deleted later by calling `esp_etm_del_event`
+ *
+ * @param[in] dma_chan GDMA channel handle, allocated by `gdma_new_channel`
+ * @param[in] config GDMA ETM event configuration
+ * @param[out] out_event Returned ETM event handle
+ * @return
+ *      - ESP_OK: Get ETM event successfully
+ *      - ESP_ERR_INVALID_ARG: Get ETM event failed because of invalid argument
+ *      - ESP_ERR_NOT_SUPPORTED: Get ETM event failed because the GDMA hardware doesn't support ETM event
+ *      - ESP_FAIL: Get ETM event failed because of other error
+ */
+esp_err_t gdma_new_etm_event(gdma_channel_handle_t dma_chan, const gdma_etm_event_config_t *config, esp_etm_event_handle_t *out_event);
+
+/**
+ * @brief GDMA ETM task configuration
+ */
+typedef struct {
+    gdma_etm_task_type_t task_type; /*!< GDMA ETM task type */
+} gdma_etm_task_config_t;
+
+/**
+ * @brief Get the ETM task for GDMA channel
+ *
+ * @note The created ETM task object can be deleted later by calling `esp_etm_del_task`
+ *
+ * @param[in] dma_chan GDMA channel handle, allocated by `gdma_new_channel`
+ * @param[in] config GDMA ETM task configuration
+ * @param[out] out_task Returned ETM task handle
+ * @return
+ *      - ESP_OK: Get ETM task successfully
+ *      - ESP_ERR_INVALID_ARG: Get ETM task failed because of invalid argument
+ *      - ESP_ERR_NOT_SUPPORTED: Get ETM task failed because the gdma hardware doesn't support ETM task
+ *      - ESP_FAIL: Get ETM task failed because of other error
+ */
+esp_err_t gdma_new_etm_task(gdma_channel_handle_t dma_chan, const gdma_etm_task_config_t *config, esp_etm_task_handle_t *out_task);
+
+/**
+ * @brief Get the mask of free M2M trigger IDs
+ *
+ * @note On some ESP targets (e.g. ESP32C3/S3), DMA trigger used for memory copy can be any of valid peripheral's trigger ID,
+ *       which can bring conflict if the peripheral is also using the same trigger ID. This function can return the free IDs
+ *       for memory copy, at the runtime.
+ *
+ * @param[in] dma_chan GDMA channel handle, allocated by `gdma_new_channel`
+ * @param[out] mask Returned mask of free M2M trigger IDs
+ * @return
+ *      - ESP_OK: Get free M2M trigger IDs successfully
+ *      - ESP_ERR_INVALID_ARG: Get free M2M trigger IDs failed because of invalid argument
+ *      - ESP_FAIL: Get free M2M trigger IDs failed because of other error
+ */
+esp_err_t gdma_get_free_m2m_trig_id_mask(gdma_channel_handle_t dma_chan, uint32_t *mask);
 
 #ifdef __cplusplus
 }

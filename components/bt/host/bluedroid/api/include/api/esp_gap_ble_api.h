@@ -127,7 +127,7 @@ typedef uint8_t esp_ble_io_cap_t;               /*!< combination of the io capab
 
 /// GAP BLE callback event type
 typedef enum {
-#if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_42_FEATURE_SUPPORT
     ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT        = 0,       /*!< When advertising data set complete, the event comes */
     ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT,             /*!< When scan response data set complete, the event comes */
     ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT,                /*!< When scan parameters set complete, the event comes */
@@ -136,20 +136,20 @@ typedef enum {
     ESP_GAP_BLE_SCAN_RSP_DATA_RAW_SET_COMPLETE_EVT,         /*!< When raw advertising data set complete, the event comes */
     ESP_GAP_BLE_ADV_START_COMPLETE_EVT,                     /*!< When start advertising complete, the event comes */
     ESP_GAP_BLE_SCAN_START_COMPLETE_EVT,                    /*!< When start scan complete, the event comes */
-#endif // #if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_INCLUDED
     ESP_GAP_BLE_AUTH_CMPL_EVT = 8,                          /*!< Authentication complete indication. */
     ESP_GAP_BLE_KEY_EVT,                                    /*!< BLE  key event for peer device keys */
     ESP_GAP_BLE_SEC_REQ_EVT,                                /*!< BLE  security request */
     ESP_GAP_BLE_PASSKEY_NOTIF_EVT,                          /*!< passkey notification event */
     ESP_GAP_BLE_PASSKEY_REQ_EVT,                            /*!< passkey request event */
     ESP_GAP_BLE_OOB_REQ_EVT,                                /*!< OOB request event */
-    ESP_GAP_BLE_LOCAL_IR_EVT,                               /*!< BLE local IR event */
-    ESP_GAP_BLE_LOCAL_ER_EVT,                               /*!< BLE local ER event */
+    ESP_GAP_BLE_LOCAL_IR_EVT,                               /*!< BLE local IR (identity Root 128-bit random static value used to generate Long Term Key) event */
+    ESP_GAP_BLE_LOCAL_ER_EVT,                               /*!< BLE local ER (Encryption Root vakue used to genrate identity resolving key) event */
     ESP_GAP_BLE_NC_REQ_EVT,                                 /*!< Numeric Comparison request event */
-#if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_42_FEATURE_SUPPORT
     ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT,                      /*!< When stop adv complete, the event comes */
     ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT,                     /*!< When stop scan complete, the event comes */
-#endif // #if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_INCLUDED
     ESP_GAP_BLE_SET_STATIC_RAND_ADDR_EVT = 19,              /*!< When set the static rand address complete, the event comes */
     ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT,                     /*!< When update connection parameters complete, the event comes */
     ESP_GAP_BLE_SET_PKT_LENGTH_COMPLETE_EVT,                /*!< When set pkt length complete, the event comes */
@@ -159,11 +159,11 @@ typedef enum {
     ESP_GAP_BLE_GET_BOND_DEV_COMPLETE_EVT,                  /*!< When get the bond device list complete, the event comes */
     ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT,                     /*!< When read the rssi complete, the event comes */
     ESP_GAP_BLE_UPDATE_WHITELIST_COMPLETE_EVT,              /*!< When add or remove whitelist complete, the event comes */
-#if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_42_FEATURE_SUPPORT
     ESP_GAP_BLE_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_COMPLETE_EVT,  /*!< When update duplicate exceptional list complete, the event comes */
-#endif //#if (BLE_42_FEATURE_SUPPORT == TRUE)
+    //BLE_INCLUDED
     ESP_GAP_BLE_SET_CHANNELS_EVT = 29,                           /*!< When setting BLE channels complete, the event comes */
-#if (BLE_50_FEATURE_SUPPORT == TRUE)
+    //BLE_50_FEATURE_SUPPORT
     ESP_GAP_BLE_READ_PHY_COMPLETE_EVT,                           /*!< when reading phy complete, this event comes */
     ESP_GAP_BLE_SET_PREFERRED_DEFAULT_PHY_COMPLETE_EVT,          /*!< when preferred default phy complete, this event comes */
     ESP_GAP_BLE_SET_PREFERRED_PHY_COMPLETE_EVT,                  /*!< when preferred phy complete , this event comes */
@@ -198,7 +198,10 @@ typedef enum {
     ESP_GAP_BLE_PERIODIC_ADV_REPORT_EVT,                         /*!< when periodic report advertising complete, the event comes */
     ESP_GAP_BLE_PERIODIC_ADV_SYNC_LOST_EVT,                      /*!< when periodic advertising sync lost complete, the event comes */
     ESP_GAP_BLE_PERIODIC_ADV_SYNC_ESTAB_EVT,                     /*!< when periodic advertising sync establish complete, the event comes */
-#endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
+    //BLE_INCLUDED
+    ESP_GAP_BLE_SC_OOB_REQ_EVT,                                  /*!< Secure Connection OOB request event */
+    ESP_GAP_BLE_SC_CR_LOC_OOB_EVT,                               /*!< Secure Connection create OOB data complete event */
+    ESP_GAP_BLE_GET_DEV_NAME_COMPLETE_EVT,                       /*!< When getting BT device name complete, the event comes */
     ESP_GAP_BLE_EVT_MAX,                                         /*!< when maximum advertising event complete, the event comes */
 } esp_gap_ble_cb_event_t;
 
@@ -287,19 +290,19 @@ typedef enum {
 /* relate to BTA_DM_BLE_SEC_xxx in bta/bta_api.h */
 typedef enum {
     ESP_BLE_SEC_ENCRYPT = 1,            /*!< relate to BTA_DM_BLE_SEC_ENCRYPT in bta/bta_api.h. If the device has already
-                                           bonded, the stack will used LTK to encrypt with the remote device directly.
+                                           bonded, the stack will used Long Term Key (LTK) to encrypt with the remote device directly.
                                            Else if the device hasn't bonded, the stack will used the default authentication request
                                            used the esp_ble_gap_set_security_param function set by the user. */
-    ESP_BLE_SEC_ENCRYPT_NO_MITM,        /*!< relate to BTA_DM_BLE_SEC_ENCRYPT_NO_MITM in bta/bta_api.h. If the device has already
-                                           bonded, the stack will check the LTK Whether the authentication request has been met, if met, used the LTK
-                                           to encrypt with the remote device directly, else Re-pair with the remote device.
-                                           Else if the device hasn't bonded, the stack will used NO MITM authentication request in the current link instead of
-                                           used the authreq in the esp_ble_gap_set_security_param function set by the user. */
-    ESP_BLE_SEC_ENCRYPT_MITM,           /*!< relate to BTA_DM_BLE_SEC_ENCRYPT_MITM in bta/bta_api.h. If the device has already
-                                           bonded, the stack will check the LTK Whether the authentication request has been met, if met, used the LTK
-                                           to encrypt with the remote device directly, else Re-pair with the remote device.
-                                           Else if the device hasn't bonded, the stack will used MITM authentication request in the current link instead of
-                                           used the authreq in the esp_ble_gap_set_security_param function set by the user. */
+    ESP_BLE_SEC_ENCRYPT_NO_MITM,        /*!< relate to BTA_DM_BLE_SEC_ENCRYPT_NO_MITM in bta/bta_api.h. If the device has been already
+                                           bonded, the stack will check the LTK (Long Term Key) Whether the authentication request has been met, and if met, use the LTK
+                                           to encrypt with the remote device directly, else re-pair with the remote device.
+                                           Else if the device hasn't been bonded, the stack will use NO MITM authentication request in the current link instead of
+                                           using the authreq in the esp_ble_gap_set_security_param function set by the user. */
+    ESP_BLE_SEC_ENCRYPT_MITM,           /*!< relate to BTA_DM_BLE_SEC_ENCRYPT_MITM in bta/bta_api.h. If the device has been already
+                                           bonded, the stack will check the LTK (Long Term Key) whether the authentication request has been met, and if met, use the LTK
+                                           to encrypt with the remote device directly, else re-pair with the remote device.
+                                           Else if the device hasn't been bonded, the stack will use MITM authentication request in the current link instead of
+                                           using the authreq in the esp_ble_gap_set_security_param function set by the user. */
 }esp_ble_sec_act_t;
 
 typedef enum {
@@ -583,6 +586,13 @@ typedef struct {
     esp_bt_octet16_t       dhk;                 /*!< the 16 bits of the dh key value */
 } esp_ble_local_id_keys_t;                      /*!< the structure of the ble local id keys value type*/
 
+/**
+* @brief  structure type of the ble local oob data value
+*/
+typedef struct {
+    esp_bt_octet16_t        oob_c;              /*!< the 128 bits of confirmation value */
+    esp_bt_octet16_t        oob_r;              /*!< the 128 bits of randomizer value */
+} esp_ble_local_oob_data_t;
 
 /**
   * @brief Structure associated with ESP_AUTH_CMPL_EVT
@@ -609,6 +619,7 @@ typedef union
     esp_ble_sec_req_t          ble_req;        /*!< BLE SMP related request */
     esp_ble_key_t              ble_key;        /*!< BLE SMP keys used when pairing */
     esp_ble_local_id_keys_t    ble_id_keys;    /*!< BLE IR event */
+    esp_ble_local_oob_data_t   oob_data;       /*!< BLE SMP secure connection OOB data */
     esp_ble_auth_cmpl_t        auth_cmpl;      /*!< Authentication complete indication. */
 } esp_ble_sec_t;                               /*!< BLE security type */
 #if (BLE_42_FEATURE_SUPPORT == TRUE)
@@ -760,6 +771,9 @@ typedef uint8_t esp_ble_gap_sync_t;
 
 typedef uint8_t esp_ble_gap_adv_type_t;
 
+/// Extend advertising tx power, range: [-127, +126] dBm
+#define EXT_ADV_TX_PWR_NO_PREFERENCE                      (127) /*!< host has no preference for tx power */
+
 /**
 * @brief ext adv parameters
 */
@@ -899,6 +913,13 @@ typedef struct {
  * @brief Gap callback parameters union
  */
 typedef union {
+    /**
+     * @brief ESP_GAP_BLE_GET_DEV_NAME_COMPLETE_EVT
+     */
+    struct ble_get_dev_name_cmpl_evt_param {
+        esp_bt_status_t status;                     /*!< Indicate the get device name success status */
+        char *name;                                 /*!< Name of bluetooth device */
+    } get_dev_name_cmpl;                            /*!< Event parameter of ESP_GAP_BLE_GET_DEV_NAME_COMPLETE_EVT */
 #if (BLE_42_FEATURE_SUPPORT == TRUE)
     /**
      * @brief ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT
@@ -1526,6 +1547,16 @@ esp_err_t esp_ble_gap_set_prefer_conn_params(esp_bd_addr_t bd_addr,
 esp_err_t esp_ble_gap_set_device_name(const char *name);
 
 /**
+ * @brief           Get device name of the local device
+ *
+ * @return
+ *                  - ESP_OK : success
+ *                  - other  : failed
+ *
+ */
+esp_err_t esp_ble_gap_get_device_name(void);
+
+/**
  * @brief          This function is called to get local used address and address type.
  *                 uint8_t *esp_bt_dev_get_address(void) get the public address
  *
@@ -1757,8 +1788,8 @@ esp_err_t esp_ble_get_bond_device_list(int *dev_num, esp_ble_bond_dev_t *dev_lis
 *                  SMP in response to ESP_GAP_BLE_OOB_REQ_EVT
 *
 * @param[in]       bd_addr: BD address of the peer device.
-* @param[in]       TK: TK value, the TK value shall be a 128-bit random number
-* @param[in]       len: length of tk, should always be 128-bit
+* @param[in]       TK: Temporary Key value, the TK value shall be a 128-bit random number
+* @param[in]       len: length of temporary key, should always be 128-bit
 *
 * @return          - ESP_OK : success
 *                  - other  : failed
@@ -1766,6 +1797,29 @@ esp_err_t esp_ble_get_bond_device_list(int *dev_num, esp_ble_bond_dev_t *dev_lis
 */
 esp_err_t esp_ble_oob_req_reply(esp_bd_addr_t bd_addr, uint8_t *TK, uint8_t len);
 
+/**
+* @brief           This function is called to provide the OOB data for
+*                  SMP in response to ESP_GAP_BLE_SC_OOB_REQ_EVT
+*
+* @param[in]       bd_addr: BD address of the peer device.
+* @param[in]       p_c: Confirmation value, it shall be a 128-bit random number
+* @param[in]       p_r: Randomizer value, it should be a 128-bit random number
+*
+* @return          - ESP_OK : success
+*                  - other  : failed
+*
+*/
+esp_err_t esp_ble_sc_oob_req_reply(esp_bd_addr_t bd_addr, uint8_t p_c[16], uint8_t p_r[16]);
+
+/**
+* @brief           This function is called to create the OOB data for
+*                  SMP when secure connection
+*
+* @return          - ESP_OK : success
+*                  - other  : failed
+*
+*/
+esp_err_t esp_ble_create_sc_oob_data(void);
 #endif /* #if (SMP_INCLUDED == TRUE) */
 
 /**

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,30 +9,12 @@
 #include <stdint.h>
 #include "soc/soc.h"
 #include "soc/regi2c_defs.h"
+#include "soc/i2c_ana_mst_reg.h"
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * @brief Reset (Disable) the I2C internal bus for all regi2c registers
- */
-static inline void regi2c_ctrl_ll_i2c_reset(void)
-{
-    // On ESP32-H2, don't need to do anything (indeed do need? not fully supported yet?)
-
-    // SET_PERI_REG_BITS(ANA_CONFIG_REG, ANA_CONFIG_M, ANA_CONFIG_M, ANA_CONFIG_S);
-}
-
-/**
- * @brief Enable the I2C internal bus to do I2C read/write operation to the BBPLL configuration register
- */
-static inline void regi2c_ctrl_ll_i2c_bbpll_enable(void)
-{
-    // On ESP32-H2, don't need to do anything (indeed do need? not fully supported yet?)
-
-    // CLEAR_PERI_REG_MASK(ANA_CONFIG_REG, ANA_I2C_BBPLL_M);
-}
 
 /**
  * @brief Start BBPLL self-calibration
@@ -45,8 +27,6 @@ static inline __attribute__((always_inline)) void regi2c_ctrl_ll_bbpll_calibrati
 
 /**
  * @brief Stop BBPLL self-calibration
- *
- * This helps to prevent BBPLL jitter (phenomenon is significant on ESP32H2)
  */
 static inline __attribute__((always_inline)) void regi2c_ctrl_ll_bbpll_calibration_stop(void)
 {
@@ -69,8 +49,8 @@ static inline __attribute__((always_inline)) bool regi2c_ctrl_ll_bbpll_calibrati
  */
 static inline void regi2c_ctrl_ll_i2c_saradc_enable(void)
 {
-    CLEAR_PERI_REG_MASK(ANA_CONFIG_REG, ANA_I2C_SAR_FORCE_PD);
-    SET_PERI_REG_MASK(ANA_CONFIG2_REG, ANA_I2C_SAR_FORCE_PU);
+    CLEAR_PERI_REG_MASK(I2C_MST_ANA_CONF1_REG, ANA_I2C_SAR_FORCE_PD);
+    SET_PERI_REG_MASK(I2C_MST_ANA_CONF2_REG, ANA_I2C_SAR_FORCE_PU);
 }
 
 /**
@@ -78,8 +58,8 @@ static inline void regi2c_ctrl_ll_i2c_saradc_enable(void)
  */
 static inline void regi2c_ctrl_ll_i2c_saradc_disable(void)
 {
-    CLEAR_PERI_REG_MASK(ANA_CONFIG_REG, ANA_I2C_SAR_FORCE_PU);
-    SET_PERI_REG_MASK(ANA_CONFIG2_REG, ANA_I2C_SAR_FORCE_PD);
+    CLEAR_PERI_REG_MASK(I2C_MST_ANA_CONF1_REG, ANA_I2C_SAR_FORCE_PU);
+    SET_PERI_REG_MASK(I2C_MST_ANA_CONF2_REG, ANA_I2C_SAR_FORCE_PD);
 }
 
 #ifdef __cplusplus

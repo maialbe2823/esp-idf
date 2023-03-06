@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "unity.h"
 #include "esp_log.h"
 #include "soc/adc_periph.h"
 #include "esp_adc/adc_oneshot.h"
@@ -36,6 +35,9 @@ static const char *TAG_CH[2][10] = {{"ADC1_CH2", "ADC1_CH3"}, {"ADC2_CH0"}};
 /*---------------------------------------------------------------
         ADC Oneshot High / Low test
 ---------------------------------------------------------------*/
+//ESP32C3 ADC2 oneshot mode is not supported anymore
+#define ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2    ((SOC_ADC_PERIPH_NUM >= 2) && !CONFIG_IDF_TARGET_ESP32C3)
+
 TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
 {
     static int adc_raw[2][10];
@@ -44,19 +46,19 @@ TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
     adc_oneshot_unit_handle_t adc1_handle;
     adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_1,
-        .ulp_mode = false,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     TEST_ESP_OK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
-#if (SOC_ADC_PERIPH_NUM >= 2)
+#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     //-------------ADC2 Init---------------//
     adc_oneshot_unit_handle_t adc2_handle;
     adc_oneshot_unit_init_cfg_t init_config2 = {
         .unit_id = ADC_UNIT_2,
-        .ulp_mode = false,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     TEST_ESP_OK(adc_oneshot_new_unit(&init_config2, &adc2_handle));
-#endif //#if (SOC_ADC_PERIPH_NUM >= 2)
+#endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 
     //-------------ADC1 TEST Channel 0 Config---------------//
     adc_oneshot_chan_cfg_t config = {
@@ -68,10 +70,10 @@ TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
     //-------------ADC1 TEST Channel 1 Config---------------//
     TEST_ESP_OK(adc_oneshot_config_channel(adc1_handle, ADC1_TEST_CHAN1, &config));
 
-#if (SOC_ADC_PERIPH_NUM >= 2)
+#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     //-------------ADC2 TEST Channel 0 Config---------------//
     TEST_ESP_OK(adc_oneshot_config_channel(adc2_handle, ADC2_TEST_CHAN0, &config));
-#endif //#if (SOC_ADC_PERIPH_NUM >= 2)
+#endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN0, 0);
     TEST_ESP_OK(adc_oneshot_read(adc1_handle, ADC1_TEST_CHAN0, &adc_raw[0][0]));
@@ -83,12 +85,12 @@ TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
     ESP_LOGI(TAG_CH[0][1], "raw  data: %d", adc_raw[0][1]);
     TEST_ASSERT_INT_WITHIN(ADC_TEST_HIGH_THRESH, ADC_TEST_HIGH_VAL, adc_raw[0][1]);
 
-#if (SOC_ADC_PERIPH_NUM >= 2)
+#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     test_adc_set_io_level(ADC_UNIT_2, ADC2_TEST_CHAN0, 0);
     TEST_ESP_OK(adc_oneshot_read(adc2_handle, ADC2_TEST_CHAN0, &adc_raw[1][0]));
     ESP_LOGI(TAG_CH[1][0], "raw  data: %d", adc_raw[1][0]);
     TEST_ASSERT_INT_WITHIN(ADC_TEST_LOW_THRESH, ADC_TEST_LOW_VAL, adc_raw[1][0]);
-#endif //#if (SOC_ADC_PERIPH_NUM >= 2)
+#endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 
 
     test_adc_set_io_level(ADC_UNIT_1, ADC1_TEST_CHAN0, 1);
@@ -101,18 +103,18 @@ TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
     ESP_LOGI(TAG_CH[0][1], "raw  data: %d", adc_raw[0][1]);
     TEST_ASSERT_INT_WITHIN(ADC_TEST_LOW_THRESH, ADC_TEST_LOW_VAL, adc_raw[0][1]);
 
-#if (SOC_ADC_PERIPH_NUM >= 2)
+#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     test_adc_set_io_level(ADC_UNIT_2, ADC2_TEST_CHAN0, 1);
     TEST_ESP_OK(adc_oneshot_read(adc2_handle, ADC2_TEST_CHAN0, &adc_raw[1][0]));
     ESP_LOGI(TAG_CH[1][0], "raw  data: %d", adc_raw[1][0]);
     TEST_ASSERT_INT_WITHIN(ADC_TEST_HIGH_THRESH, ADC_TEST_HIGH_VAL, adc_raw[1][0]);
-#endif //#if (SOC_ADC_PERIPH_NUM >= 2)
+#endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 
 
     TEST_ESP_OK(adc_oneshot_del_unit(adc1_handle));
-#if (SOC_ADC_PERIPH_NUM >= 2)
+#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
     TEST_ESP_OK(adc_oneshot_del_unit(adc2_handle));
-#endif //#if (SOC_ADC_PERIPH_NUM >= 2)
+#endif //#if ADC_TEST_ONESHOT_HIGH_LOW_TEST_ADC2
 }
 
 
@@ -130,12 +132,11 @@ TEST_CASE("ADC oneshot high/low test", "[adc_oneshot]")
 
 static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
 {
-    adc_atten_t atten[SOC_ADC_ATTEN_NUM] = {ADC_ATTEN_DB_0, ADC_ATTEN_DB_2_5, ADC_ATTEN_DB_6, ADC_ATTEN_DB_11};
     //-------------ADC Init---------------//
     adc_oneshot_unit_handle_t adc_handle;
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = unit_id,
-        .ulp_mode = false,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     TEST_ESP_OK(adc_oneshot_new_unit(&init_config, &adc_handle));
 
@@ -146,20 +147,20 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
 
     //-------------ADC Calibration Init---------------//
     bool do_calibration = false;
-    adc_cali_handle_t cali_handle[SOC_ADC_ATTEN_NUM] = {};
-    for (int i = 0; i < SOC_ADC_ATTEN_NUM; i++) {
-        do_calibration = test_adc_calibration_init(unit_id, i, SOC_ADC_RTC_MAX_BITWIDTH, &cali_handle[i]);
+    adc_cali_handle_t cali_handle[TEST_ATTEN_NUMS] = {};
+    for (int i = 0; i < TEST_ATTEN_NUMS; i++) {
+        do_calibration = test_adc_calibration_init(unit_id, g_test_atten[i], SOC_ADC_RTC_MAX_BITWIDTH, &cali_handle[i]);
     }
     if (!do_calibration) {
         ESP_LOGW(TAG, "No efuse bits burnt, only test the regi2c analog register values");
     }
 
-    for (int i = 0; i < SOC_ADC_ATTEN_NUM; i++) {
+    for (int i = 0; i < TEST_ATTEN_NUMS; i++) {
 
         //-------------ADC Channel Config---------------//
-        config.atten = atten[i];
+        config.atten = g_test_atten[i];
         TEST_ESP_OK(adc_oneshot_config_channel(adc_handle, channel, &config));
-        printf("Test with atten: %d\n", atten[i]);
+        printf("Test with atten: %d\n", g_test_atten[i]);
 
         //---------------------------------Before Sleep-----------------------------------//
         printf("Before Light Sleep\n");
@@ -217,11 +218,11 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
 
         //Compare
         int32_t raw_diff = raw_expected - raw_after_sleep;
-        ESP_LOGI(TAG, "ADC%d Chan%d: raw difference: %d", unit_id + 1, channel, raw_diff);
+        ESP_LOGI(TAG, "ADC%d Chan%d: raw difference: %"PRId32, unit_id + 1, channel, raw_diff);
 
         if (do_calibration) {
                 int32_t cali_diff = cali_expected - cali_after_sleep;
-                ESP_LOGI(TAG, "ADC%d Chan%d: cali difference: %d", unit_id + 1, channel, cali_diff);
+                ESP_LOGI(TAG, "ADC%d Chan%d: cali difference: %"PRId32, unit_id + 1, channel, cali_diff);
         }
 
         //Test Calibration registers
@@ -232,7 +233,7 @@ static void s_adc_oneshot_with_sleep(adc_unit_t unit_id, adc_channel_t channel)
 
     }
     TEST_ESP_OK(adc_oneshot_del_unit(adc_handle));
-    for (int i = 0; i < SOC_ADC_ATTEN_NUM; i++) {
+    for (int i = 0; i < TEST_ATTEN_NUMS; i++) {
         if (cali_handle[i]) {
             test_adc_calibration_deinit(cali_handle[i]);
         }
@@ -253,8 +254,12 @@ TEST_CASE("test ADC1 Single Read with Light Sleep", "[adc][manul][ignore]")
     s_adc_oneshot_with_sleep(ADC_UNIT_1, ADC1_SLEEP_TEST_CHAN);
 }
 
+#if (SOC_ADC_PERIPH_NUM >= 2) && !CONFIG_IDF_TARGET_ESP32C3
+//ESP32C3 ADC2 oneshot mode is not supported anymore
 TEST_CASE("test ADC2 Single Read with Light Sleep", "[adc][manul][ignore]")
 {
     s_adc_oneshot_with_sleep(ADC_UNIT_2, ADC2_SLEEP_TEST_CHAN);
 }
+#endif  //#if (SOC_ADC_PERIPH_NUM >= 2) && !CONFIG_IDF_TARGET_ESP32C3
+
 #endif  //#if SOC_ADC_CALIBRATION_V1_SUPPORTED

@@ -28,7 +28,7 @@
 #define CACHE_LINE_SIZE         32
 #define CACHE_SIZE              (1 << 13)
 #define TEST_SIZE               (CACHE_SIZE)
-#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C6
 #define CACHE_WAYS              8
 #define CACHE_LINE_SIZE         32
 #define CACHE_SIZE              (1 << 14)
@@ -47,8 +47,7 @@ typedef struct {
 
 /* No performance monitor in RISCV for now
  */
-#if !DISABLED_FOR_TARGETS(ESP32C3)
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+#if !__riscv
 //IDF-5052
 
 static const char* TAG = "test_ccomp_timer";
@@ -178,5 +177,4 @@ TEST_CASE("data cache hit rate sweep", "[test_utils][ccomp_timer]")
     free(flash_mem);
 #endif
 }
-#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
-#endif // !DISABLED_FOR_TARGETS(ESP32C3)
+#endif // __riscv

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Unlicense OR CC0-1.0
 
 
@@ -13,7 +13,7 @@ from pytest_embedded import Dut
 @pytest.mark.esp32c3  # no runner available at the moment
 @pytest.mark.esp32s2
 @pytest.mark.sdcard_spimode
-def test_examples_sd_card_sdmmc(dut: Dut) -> None:
+def test_examples_sd_card_sdspi(dut: Dut) -> None:
     dut.expect('example: Initializing SD card', timeout=20)
     dut.expect('example: Using SPI peripheral', timeout=20)
 
@@ -33,6 +33,12 @@ def test_examples_sd_card_sdmmc(dut: Dut) -> None:
                     'Renaming file /sdcard/hello.txt to /sdcard/foo.txt',
                     'Reading file /sdcard/foo.txt',
                     "Read from file: 'Hello {}!'".format(name),
+                    re.compile(str.encode('Formatting card, allocation unit size=\\S+')),
+                    'file doesnt exist, format done',
+                    'Opening file /sdcard/nihao.txt',
+                    'File written',
+                    'Reading file /sdcard/nihao.txt',
+                    "Read from file: 'Nihao {}!'".format(name),
                     'Card unmounted')
 
     for msg in message_list:

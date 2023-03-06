@@ -21,15 +21,13 @@
 /* Defines compile-time configuration macros */
 #include "multi_heap_config.h"
 
-#if !CONFIG_HEAP_TLSF_USE_ROM_IMPL
-#include "tlsf.h"
-#else
+#if CONFIG_HEAP_TLSF_USE_ROM_IMPL
 /* Header containing the declaration of tlsf_poison_fill_pfunc_set()
- * used to register multi_heap_internal_poison_fill_region() as a
- * callback to fill memory region with given patterns in the heap
+ * and tlsf_poison_check_pfunc_set() used to register callbacks to
+ * fill and check memory region with given patterns in the heap
  * components.
  */
-#include "rom/tlsf.h"
+#include "esp_rom_tlsf.h"
 #endif
 
 #ifdef MULTI_HEAP_POISONING
@@ -68,7 +66,7 @@ typedef struct {
 
    Returns the pointer to the actual usable data buffer (ie after 'head')
 */
-static uint8_t *poison_allocated_region(poison_head_t *head, size_t alloc_size)
+__attribute__((noinline))  static uint8_t *poison_allocated_region(poison_head_t *head, size_t alloc_size)
 {
     uint8_t *data = (uint8_t *)(&head[1]); /* start of data ie 'real' allocated buffer */
     poison_tail_t *tail = (poison_tail_t *)(data + alloc_size);
@@ -92,7 +90,7 @@ static uint8_t *poison_allocated_region(poison_head_t *head, size_t alloc_size)
 
    Returns a pointer to the poison header structure, or NULL if the poison structures are corrupt.
 */
-static poison_head_t *verify_allocated_region(void *data, bool print_errors)
+__attribute__((noinline)) static poison_head_t *verify_allocated_region(void *data, bool print_errors)
 {
     poison_head_t *head = (poison_head_t *)((intptr_t)data - sizeof(poison_head_t));
     poison_tail_t *tail = (poison_tail_t *)((intptr_t)data + head->alloc_size);
@@ -134,8 +132,12 @@ static poison_head_t *verify_allocated_region(void *data, bool print_errors)
    if swap_pattern is true, swap patterns in the buffer (ie replace MALLOC_FILL_PATTERN with FREE_FILL_PATTERN, and vice versa.)
 
    Returns true if verification checks out.
+
+   This function has the attribute noclone to prevent the compiler to create a clone on flash where expect_free is removed (as this
+   function is called only with expect_free == true throughout the component).
 */
-static bool verify_fill_pattern(void *data, size_t size, bool print_errors, bool expect_free, bool swap_pattern)
+__attribute__((noinline)) NOCLONE_ATTR
+static bool verify_fill_pattern(void *data, size_t size, const bool print_errors, const bool expect_free, bool swap_pattern)
 {
     const uint32_t FREE_FILL_WORD = (FREE_FILL_PATTERN << 24) | (FREE_FILL_PATTERN << 16) | (FREE_FILL_PATTERN << 8) | FREE_FILL_PATTERN;
     const uint32_t MALLOC_FILL_WORD = (MALLOC_FILL_PATTERN << 24) | (MALLOC_FILL_PATTERN << 16) | (MALLOC_FILL_PATTERN << 8) | MALLOC_FILL_PATTERN;
@@ -261,7 +263,9 @@ void *multi_heap_malloc(multi_heap_handle_t heap, size_t size)
     return data;
 }
 
-void multi_heap_free(multi_heap_handle_t heap, void *p)
+/* This function has the noclone attribute to prevent the compiler to optimize out the
+ * check for p == NULL and create a clone function placed in flash. */
+NOCLONE_ATTR void multi_heap_free(multi_heap_handle_t heap, void *p)
 {
     if (p == NULL) {
         return;
@@ -359,9 +363,10 @@ multi_heap_handle_t multi_heap_register(void *start, size_t size)
         memset(start, FREE_FILL_PATTERN, size);
     }
 #endif
-#ifdef CONFIG_HEAP_TLSF_USE_ROM_IMPL
+#if CONFIG_HEAP_TLSF_USE_ROM_IMPL
     tlsf_poison_fill_pfunc_set(multi_heap_internal_poison_fill_region);
-#endif
+    tlsf_poison_check_pfunc_set(multi_heap_internal_check_block_poisoning);
+#endif // CONFIG_HEAP_TLSF_USE_ROM_IMPL
     return multi_heap_register_impl(start, size);
 }
 
@@ -378,6 +383,7 @@ size_t multi_heap_get_allocated_size(multi_heap_handle_t heap, void *p)
     poison_head_t *head = verify_allocated_region(p, true);
     assert(head != NULL);
     size_t result = multi_heap_get_allocated_size_impl(heap, head);
+    subtract_poison_overhead(&result);
     return result;
 }
 

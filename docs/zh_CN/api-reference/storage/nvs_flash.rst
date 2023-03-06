@@ -46,7 +46,7 @@ NVS 的操作对象为键值对，其中键是 ASCII 字符串，当前支持的
 命名空间
 ^^^^^^^^^^
 
-为了减少不同组件之间键名的潜在冲突，NVS 将每个键值对分配给一个命名空间。命名空间的命名规则遵循键名的命名规则，例如，最多可占 15 个字符。命名空间的名称在调用 :cpp:func:`nvs_open` 或 :cpp:type:`nvs_open_from_partition` 中指定，调用后将返回一个不透明句柄，用于后续调用 ``nvs_get_*``、``nvs_set_*`` 和 ``nvs_commit`` 函数。这样，一个句柄关联一个命名空间，键名便不会与其他命名空间中相同键名冲突。请注意，不同 NVS 分区中具有相同名称的命名空间将被视为不同的命名空间。
+为了减少不同组件之间键名的潜在冲突，NVS 将每个键值对分配给一个命名空间。命名空间的命名规则遵循键名的命名规则，例如，最多可占 15 个字符。此外，单个 NVS 分区最多只能容纳 254 个不同的命名空间。命名空间的名称在调用 :cpp:func:`nvs_open` 或 :cpp:type:`nvs_open_from_partition` 中指定，调用后将返回一个不透明句柄，用于后续调用 ``nvs_get_*``、``nvs_set_*`` 和 ``nvs_commit`` 函数。这样，一个句柄关联一个命名空间，键名便不会与其他命名空间中相同键名冲突。请注意，不同 NVS 分区中具有相同名称的命名空间将被视为不同的命名空间。
 
 NVS 迭代器
 ^^^^^^^^^^^^^
@@ -82,14 +82,14 @@ NVS 分区内存储的数据可使用 AES-XTS 进行加密，类似于 IEEE P161
 
 启用 :doc:`Flash 加密 <../../security/flash-encryption>` 时，默认启用 NVS 加密。这是因为 Wi-Fi 驱动在默认的 NVS 分区中存储了凭证（如 SSID 和密码）。如已启用平台级加密，那么同时默认启用 NVS 加密有其必要性。
 
-使用 NVS 加密，分区表必须包含 :ref:`nvs_key_partition`。在分区表选项 (menuconfig->Partition Table) 下，为 NVS 加密提供了两个包含 :ref:`nvs_key_partition` 的分区表，您可以通过工程配置菜单 (``idf.py menuconfig``) 进行选择。请参考 :example:`security/flash_encryption` 中的例子，了解如何配置和使用 NVS 加密功能。
+使用 NVS 加密，分区表必须包含 :ref:`nvs_key_partition`。在分区表选项 (``menuconfig`` > ``Partition Table``) 下，为 NVS 加密提供了两个包含 :ref:`nvs_key_partition` 的分区表，您可以通过工程配置菜单 (``idf.py menuconfig``) 进行选择。请参考 :example:`security/flash_encryption` 中的例子，了解如何配置和使用 NVS 加密功能。
 
 .. _nvs_key_partition:
 
 NVS 密钥分区
 ^^^^^^^^^^^^^^^^^
 
-    应用程序如果想使用 NVS 加密，则需要编译进一个类型为 `data`，子类型为 `key` 的密钥分区。该分区应标记为 `已加密` 且最小为 4096 字节。如需了解更多详细信息，请参考 :doc:`分区表 <../../api-guides/partition-tables>`。在分区表选项 (menuconfig->Partition Table) 下提供了两个包含 :ref:`nvs_key_partition` 的额外分区表，可以直接用于 :ref:`nvs_encryption`。这些分区的具体结构见下表：
+应用程序如果想使用 NVS 加密，则需要编译进一个类型为 `data`，子类型为 `key` 的密钥分区。该分区应标记为 `已加密` 且最小为 4096 字节。如需了解更多详细信息，请参考 :doc:`分区表 <../../api-guides/partition-tables>`。在分区表选项 (``menuconfig`` > ``Partition Table``) 下提供了两个包含 :ref:`nvs_key_partition` 的额外分区表，可以直接用于 :ref:`nvs_encryption`。这些分区的具体结构见下表：
 
 .. highlight:: none
 
@@ -110,6 +110,11 @@ NVS 密钥分区
     启用 NVS 加密时，可用 :cpp:func:`nvs_flash_init` API 函数来初始化加密的默认 NVS 分区，在内部生成 ESP 芯片上的 XTS 加密密钥。在找到 :ref:`nvs_key_partition` 后，API 函数利用 :component_file:`nvs_flash/include/nvs_flash.h` 提供的 :cpp:func:`nvs_flash_generate_keys` 函数，自动生成并存储该分区中的 NVS 密钥。只有当各自的密钥分区为空时，才会生成并存储新的密钥。可以借助 :cpp:func:`nvs_flash_secure_init_partition` 用同一个密钥分区来读取安全配置，以初始化一个定制的加密 NVS 分区。
 
     API 函数 :cpp:func:`nvs_flash_secure_init` 和 :cpp:func:`nvs_flash_secure_init_partition` 不在内部产生密钥。当这些 API 函数用于初始化加密的 NVS 分区时，可以在启动后使用 `nvs_flash.h` 提供的 :cpp:func:`nvs_flash_generate_keys` API 函数生成密钥，以加密的形式把密钥写到密钥分区上。
+
+    .. note:: 请注意，使用该方法启动应用前，必须先完全擦除 `nvs_keys` 分区，否则该应用可能会认为 `nvs_keys` 分区不为空，并且包含数据格式错误，从而导致 :c:macro:`ESP_ERR_NVS_CORRUPT_KEY_PART` 报错。如果遇到这种情况，可以使用以下命令：
+        ::
+
+            parttool.py --port PORT --partition-table-file=PARTITION_TABLE_FILE --partition-table-offset PARTITION_TABLE_OFFSET erase_partition --partition-type=data --partition-subtype=nvs_keys
 
 2. 使用预先生成的密钥分区：
 

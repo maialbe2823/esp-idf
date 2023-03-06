@@ -1,13 +1,14 @@
 Analog to Digital Converter (ADC) Oneshot Mode Driver
 =====================================================
 
+{IDF_TARGET_ADC_NUM:default="two", esp32c2="one", esp32c6="one", esp32h4="one"}
 
 Introduction
 ------------
 
 The Analog to Digital Converter is an on-chip sensor which is able to measure analog signals from dedicated analog IO pads.
 
-The ADC on {IDF_TARGET_NAME} can be used in scenario(s) like:
+{IDF_TARGET_NAME} has {IDF_TARGET_ADC_NUM} ADC unit(s), which can be used in scenario(s) like:
 
 - Generate one-shot ADC conversion result
 
@@ -41,7 +42,8 @@ The ADC oneshot mode driver is implemented based on {IDF_TARGET_NAME} SAR ADC mo
 To install an ADC instance, set up the required initial configuration structure :cpp:type:`adc_oneshot_unit_init_cfg_t`:
 
 -  :cpp:member:`adc_oneshot_unit_init_cfg_t::unit_id` selects the ADC. Please refer to the `datasheet <{IDF_TARGET_TRM_EN_URL}>`__ to know dedicated analog IOs for this ADC.
--  :cpp:member:`adc_oneshot_unit_init_cfg_t::ulp_mode` sets if the ADC will be working under super low power mode.
+-  :cpp:member:`adc_oneshot_unit_init_cfg_t::clk_src` selects the source clock of the ADC. If it's set to 0, driver will fallback to use a default clock source, see :cpp:type:`adc_oneshot_clk_src_t` to know the details.
+-  :cpp:member:`adc_oneshot_unit_init_cfg_t::ulp_mode` sets if the ADC will be working under ULP mode.
 
 .. todo::
 
@@ -62,7 +64,7 @@ Create an ADC Unit Handle under Normal Oneshot Mode
     adc_oneshot_unit_handle_t adc1_handle;
     adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_1,
-        .ulp_mode = false,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
 
@@ -78,10 +80,9 @@ Recycle the ADC Unit
 Unit Configuration
 ^^^^^^^^^^^^^^^^^^
 
-After an ADC instance is created, set up the :cpp:type:`adc_oneshot_chan_cfg_t` to configure ADC IO to measure analog signal:
+After an ADC instance is created, set up the :cpp:type:`adc_oneshot_chan_cfg_t` to configure ADC IOs to measure analog signal:
 
 -  :cpp:member:`adc_oneshot_chan_cfg_t::atten`, ADC attenuation. Refer to the On-Chip Sensor chapter in `TRM <{IDF_TARGET_TRM_EN_URL}>`__.
--  :cpp:member:`adc_oneshot_chan_cfg_t::channel`, the IO corresponding ADC channel number. See below note.
 -  :cpp:member:`adc_oneshot_chan_cfg_t::bitwidth`, the bitwidth of the raw conversion result.
 
 .. note::
@@ -89,7 +90,8 @@ After an ADC instance is created, set up the :cpp:type:`adc_oneshot_chan_cfg_t` 
     For the IO corresponding ADC channel number. Check `datasheet <{IDF_TARGET_TRM_EN_URL}>`__ to know the ADC IOs.
     On the other hand, :cpp:func:`adc_continuous_io_to_channel` and :cpp:func:`adc_continuous_channel_to_io` can be used to know the ADC channels and ADC IOs.
 
-To make these settings take effect, call :cpp:func:`adc_oneshot_config_channel` with above configuration structure. Especially, this :cpp:func:`adc_oneshot_config_channel` can be called multiple times to configure different ADC channels. Drvier will save these per channel configurations internally.
+To make these settings take effect, call :cpp:func:`adc_oneshot_config_channel` with above configuration structure. You should specify an ADC channel to be configured as well.
+This function (:cpp:func:`adc_oneshot_config_channel`) can be called multiple times to configure different ADC channels. The Driver will save each of these channel configurations internally.
 
 
 Configure Two ADC Channels
@@ -98,22 +100,19 @@ Configure Two ADC Channels
 .. code:: c
 
     adc_oneshot_chan_cfg_t config = {
-        .channel = EXAMPLE_ADC1_CHAN0,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
         .atten = ADC_ATTEN_DB_11,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, &config));
-
-    config.channel = EXAMPLE_ADC1_CHAN1;
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN0, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
 
 
 Read Conversion Result
 ^^^^^^^^^^^^^^^^^^^^^^
 
-After above configurations, the ADC is ready to measure the analog siganl(s) from the configured ADC channel(s). Call :cpp:func:`adc_oneshot_read` to get the conversion raw result of an ADC channel.
+After above configurations, the ADC is ready to measure the analog signal(s) from the configured ADC channel(s). Call :cpp:func:`adc_oneshot_read` to get the conversion raw result of an ADC channel.
 
--  :cpp:func:`adc_oneshot_read` is safer. ADC(s) are shared by some other drivers / peripherals, see `Hardware Limitations <#hardware-limitations>`__. This function takes some mutexes, to avoid concurrent hardware usage. Therefore, this function should not be used in an ISR context. This function may fail when the ADC is in use by other drivers / peripherals, and return :c:macro:`ESP_ERR_TIMEOUT`. Under this condition, the ADC raw result is invalid.
+-  :cpp:func:`adc_oneshot_read` is safe to use. ADC(s) are shared by some other drivers / peripherals, see `Hardware Limitations <#hardware-limitations>`__. This function uses mutexes to avoid concurrent hardware usage. Therefore, this function should not be used in an ISR context. This function may fail when the ADC is in use by other drivers / peripherals, and return :c:macro:`ESP_ERR_TIMEOUT`. Under this condition, the ADC raw result is invalid.
 
 These two functions will both fail due to invalid arguments.
 
@@ -146,6 +145,7 @@ Read Raw Result
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw[0][1]));
     ESP_LOGI(TAG, "ADC%d Channel[%d] Raw Data: %d", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN1, adc_raw[0][1]);
 
+.. _hardware_limitations_adc_oneshot:
 
 Hardware Limitations
 ^^^^^^^^^^^^^^^^^^^^
@@ -154,11 +154,15 @@ Hardware Limitations
 
 .. only:: SOC_ADC_DMA_SUPPORTED
 
-    - A specific ADC unit can only work under one operating mode at any one time, either Continuous Mode or Oneshot Mode. :cpp:func:`adc_oneshot_read` has provided the protection.
+    - A specific ADC unit can only work under one operating mode at any one time, either continuous mode or oneshot mode. :cpp:func:`adc_oneshot_read` has provided the protection.
 
-.. only:: esp32s2 or esp32c3 or esp32s3
+.. only:: esp32 or esp32s2 or esp32s3
 
-    - ADC2 is also used by the Wi-Fi. :cpp:func:`adc_oneshot_read` has provided the protection between Wi-Fi driver and ADC continuous mode driver.
+    - ADC2 is also used by the Wi-Fi. :cpp:func:`adc_oneshot_read` has provided the protection between Wi-Fi driver and ADC oneshot mode driver.
+
+.. only:: esp32c3
+
+    - ADC2 oneshot mode is no longer supported, due to hardware limitation. The results are not stable. This issue can be found in `ESP32C3 Errata <https://www.espressif.com/sites/default/files/documentation/esp32-c3_errata_en.pdf>`_. For compatibility, you can enable :ref:`CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3` to force use ADC2.
 
 .. only:: esp32
 
@@ -188,7 +192,7 @@ Thread Safety
 
 Above functions are guaranteed to be thread safe. Therefore, you can call them from different RTOS tasks without protection by extra locks.
 
--  :cpp:func:`adc_oneshot_del_unit` is not thread safe. Besides, concurrently calling this function may result in thread-safe APIs fail.
+-  :cpp:func:`adc_oneshot_del_unit` is not thread safe. Besides, concurrently calling this function may result in failures of above thread-safe APIs.
 
 
 Kconfig Options

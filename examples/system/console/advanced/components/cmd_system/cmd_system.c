@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include "esp_log.h"
 #include "esp_console.h"
@@ -86,8 +87,8 @@ static int get_version(int argc, char **argv)
         case CHIP_ESP32C3:
             model = "ESP32-C3";
             break;
-        case CHIP_ESP32H2:
-            model = "ESP32-H2";
+        case CHIP_ESP32H4:
+            model = "ESP32-H4";
             break;
         case CHIP_ESP32C2:
             model = "ESP32-C2";
@@ -105,7 +106,7 @@ static int get_version(int argc, char **argv)
     printf("Chip info:\r\n");
     printf("\tmodel:%s\r\n", model);
     printf("\tcores:%d\r\n", info.cores);
-    printf("\tfeature:%s%s%s%s%d%s\r\n",
+    printf("\tfeature:%s%s%s%s%"PRIu32"%s\r\n",
            info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
            info.features & CHIP_FEATURE_BLE ? "/BLE" : "",
            info.features & CHIP_FEATURE_BT ? "/BT" : "",
@@ -149,7 +150,7 @@ static void register_restart(void)
 
 static int free_mem(int argc, char **argv)
 {
-    printf("%d\n", esp_get_free_heap_size());
+    printf("%"PRIu32"\n", esp_get_free_heap_size());
     return 0;
 }
 
@@ -168,7 +169,7 @@ static void register_free(void)
 static int heap_size(int argc, char **argv)
 {
     uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
-    printf("min heap size: %u\n", heap_size);
+    printf("min heap size: %"PRIu32"\n", heap_size);
     return 0;
 }
 
@@ -223,7 +224,7 @@ static void register_tasks(void)
 
 static struct {
     struct arg_int *wakeup_time;
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT0_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
     struct arg_int *wakeup_gpio_num;
     struct arg_int *wakeup_gpio_level;
 #endif
@@ -244,7 +245,7 @@ static int deep_sleep(int argc, char **argv)
         ESP_ERROR_CHECK( esp_sleep_enable_timer_wakeup(timeout) );
     }
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
     if (deep_sleep_args.wakeup_gpio_num->count) {
         int io_num = deep_sleep_args.wakeup_gpio_num->ival[0];
         if (!esp_sleep_is_valid_wakeup_gpio(io_num)) {
@@ -265,7 +266,7 @@ static int deep_sleep(int argc, char **argv)
         ESP_ERROR_CHECK( esp_sleep_enable_ext1_wakeup(1ULL << io_num, level) );
         ESP_LOGE(TAG, "GPIO wakeup from deep sleep currently unsupported on ESP32-C3");
     }
-#endif // SOC_PM_SUPPORT_EXT_WAKEUP
+#endif // SOC_PM_SUPPORT_EXT1_WAKEUP
 
 #if CONFIG_IDF_TARGET_ESP32
     rtc_gpio_isolate(GPIO_NUM_12);
@@ -279,7 +280,7 @@ static void register_deep_sleep(void)
     int num_args = 1;
     deep_sleep_args.wakeup_time =
         arg_int0("t", "time", "<t>", "Wake up time, ms");
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT0_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
     deep_sleep_args.wakeup_gpio_num =
         arg_int0(NULL, "io", "<n>",
                  "If specified, wakeup using GPIO with given number");
@@ -292,7 +293,7 @@ static void register_deep_sleep(void)
     const esp_console_cmd_t cmd = {
         .command = "deep_sleep",
         .help = "Enter deep sleep mode. "
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT0_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
         "Two wakeup modes are supported: timer and GPIO. "
 #else
         "Timer wakeup mode is supported. "

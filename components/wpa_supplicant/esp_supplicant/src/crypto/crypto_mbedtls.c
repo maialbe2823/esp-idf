@@ -36,10 +36,6 @@
 #include "crypto.h"
 #include "mbedtls/esp_config.h"
 
-#ifdef MBEDTLS_ARC4_C
-#include "mbedtls/arc4.h"
-#endif
-
 static int digest_vector(mbedtls_md_type_t md_type, size_t num_elem,
 			 const u8 *addr[], const size_t *len, u8 *mac)
 {
@@ -220,7 +216,8 @@ int crypto_hash_finish(struct crypto_hash *crypto_ctx, u8 *mac, size_t *len)
 	if (mac == NULL || len == NULL) {
 		goto err;
 	}
-	md_type = mbedtls_md_get_type(ctx->MBEDTLS_PRIVATE(md_info));
+
+	md_type = mbedtls_md_get_type(mbedtls_md_info_from_ctx(ctx));
 	switch(md_type) {
 	case MBEDTLS_MD_MD5:
 		if (*len < MD5_MAC_LEN) {
@@ -525,10 +522,6 @@ static mbedtls_cipher_type_t alg_to_mbedtls_cipher(enum crypto_cipher_alg alg,
 						   size_t key_len)
 {
 	switch (alg) {
-#ifdef MBEDTLS_ARC4_C
-	case CRYPTO_CIPHER_ALG_RC4:
-		return MBEDTLS_CIPHER_ARC4_128;
-#endif
 	case CRYPTO_CIPHER_ALG_AES:
 		if (key_len == 16) {
 			return MBEDTLS_CIPHER_AES_128_CBC;
@@ -752,25 +745,7 @@ cleanup:
 int pbkdf2_sha1(const char *passphrase, const u8 *ssid, size_t ssid_len,
 		int iterations, u8 *buf, size_t buflen)
 {
-
-	mbedtls_md_context_t sha1_ctx;
-	const mbedtls_md_info_t *info_sha1;
-	int ret;
-
-	mbedtls_md_init(&sha1_ctx);
-
-	info_sha1 = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
-	if (info_sha1 == NULL) {
-		ret = -1;
-		goto cleanup;
-	}
-
-	if ((ret = mbedtls_md_setup(&sha1_ctx, info_sha1, 1)) != 0) {
-		ret = -1;
-		goto cleanup;
-	}
-
-	ret = mbedtls_pkcs5_pbkdf2_hmac(&sha1_ctx, (const u8 *) passphrase,
+	int ret = mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA1, (const u8 *) passphrase,
 					os_strlen(passphrase) , ssid,
 					ssid_len, iterations, 32, buf);
 	if (ret != 0) {
@@ -779,7 +754,6 @@ int pbkdf2_sha1(const char *passphrase, const u8 *ssid, size_t ssid_len,
 	}
 
 cleanup:
-	mbedtls_md_free(&sha1_ctx);
 	return ret;
 }
 
@@ -863,46 +837,6 @@ cleanup:
 	mbedtls_ccm_free(&ccm);
 
 	return ret;
-}
-#endif
-
-#ifdef MBEDTLS_ARC4_C
-int rc4_skip(const u8 *key, size_t keylen, size_t skip,
-             u8 *data, size_t data_len)
-{
-	int ret;
-	unsigned char skip_buf_in[16];
-	unsigned char skip_buf_out[16];
-	mbedtls_arc4_context ctx;
-	unsigned char *obuf = os_malloc(data_len);
-
-	if (!obuf) {
-		wpa_printf(MSG_ERROR, "%s:memory allocation failed", __func__);
-		return -1;
-	}
-	mbedtls_arc4_init(&ctx);
-	mbedtls_arc4_setup(&ctx, key, keylen);
-	while (skip >= sizeof(skip_buf_in)) {
-		size_t len = skip;
-		if (len > sizeof(skip_buf_in)) {
-			len = sizeof(skip_buf_in);
-		}
-		if ((ret = mbedtls_arc4_crypt(&ctx, len, skip_buf_in,
-					      skip_buf_out)) != 0) {
-			wpa_printf(MSG_ERROR, "rc4 encryption failed");
-			os_free(obuf);
-			return -1;
-		}
-		os_memcpy(skip_buf_in, skip_buf_out, 16);
-		skip -= len;
-	}
-
-	mbedtls_arc4_crypt(&ctx, data_len, data, obuf);
-
-	memcpy(data, obuf, data_len);
-	os_free(obuf);
-
-	return 0;
 }
 #endif
 

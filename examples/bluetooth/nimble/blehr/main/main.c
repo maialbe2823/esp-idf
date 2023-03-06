@@ -173,7 +173,7 @@ blehr_tx_hrate(TimerHandle_t ev)
     }
 
     om = ble_hs_mbuf_from_flat(hrm, sizeof(hrm));
-    rc = ble_gattc_notify_custom(conn_handle, hrs_hrm_handle, om);
+    rc = ble_gatts_notify_custom(conn_handle, hrs_hrm_handle, om);
 
     assert(rc == 0);
 
@@ -280,7 +280,12 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    nimble_port_init();
+    ret = nimble_port_init();
+    if (ret != ESP_OK) {
+        MODLOG_DFLT(ERROR, "Failed to init nimble %d \n", ret);
+        return;
+    }
+
     /* Initialize the NimBLE host configuration */
     ble_hs_cfg.sync_cb = blehr_on_sync;
     ble_hs_cfg.reset_cb = blehr_on_reset;

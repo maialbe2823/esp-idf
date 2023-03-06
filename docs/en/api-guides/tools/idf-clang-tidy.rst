@@ -8,10 +8,10 @@ The IDF Clang Tidy is a tool that uses `clang-tidy <https://clang.llvm.org/extra
 
    This functionality and the toolchain it relies on are still under development. There may be breaking changes before a final release.
 
-.. only:: esp32c3 or esp32h2
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
    .. warning::
-    
+
       This tool does not support RISC-V based chips yet. For now, we don't provide clang based toolchain for RISC-V.
 
 Prerequisites
@@ -20,8 +20,8 @@ Prerequisites
 If you have never run this tool before, take the following steps to get this tool prepared.
 
 #. Run the export scripts (``export.sh`` / ``export.bat`` / ... ) to set up the environment variables.
-#. Run ``pip install --upgrade pyclang`` to install this plugin. The extra commands would be activated in ``idf.py`` automatically. 
-#. Run ``idf_tools.py install xtensa-clang`` to install the clang-tidy required binaries
+#. Run ``pip install --upgrade pyclang`` to install this plugin. The extra commands would be activated in ``idf.py`` automatically.
+#. Run ``idf_tools.py install esp-clang`` to install the clang-tidy required binaries
 
    .. note::
 
@@ -32,7 +32,7 @@ If you have never run this tool before, take the following steps to get this too
    .. note::
 
       This file would be bundled in future toolchain releases. This is a temporary workaround.
-   
+
 #. Run the export scripts (``export.sh`` / ``export.bat`` / ... ) again to refresh the environment variables.
 
 Extra Commands

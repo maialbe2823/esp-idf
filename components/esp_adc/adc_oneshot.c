@@ -15,12 +15,13 @@
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "esp_adc/adc_oneshot.h"
+#include "clk_tree.h"
 #include "esp_private/adc_private.h"
 #include "esp_private/adc_share_hw_ctrl.h"
+#include "esp_private/sar_periph_ctrl.h"
 #include "hal/adc_types.h"
 #include "hal/adc_oneshot_hal.h"
 #include "hal/adc_ll.h"
-#include "hal/adc_hal_conf.h"
 #include "soc/adc_periph.h"
 
 
@@ -77,6 +78,13 @@ esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *init_config, a
     adc_oneshot_unit_ctx_t *unit = NULL;
     ESP_GOTO_ON_FALSE(init_config && ret_unit, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument: null pointer");
     ESP_GOTO_ON_FALSE(init_config->unit_id < SOC_ADC_PERIPH_NUM, ESP_ERR_INVALID_ARG, err, TAG, "invalid unit");
+#if CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3
+    /**
+     * We only check this on ESP32C3, because other adc units are no longer supported on later chips
+     * If CONFIG_ADC_ONESHOT_FORCE_USE_ADC2_ON_C3 is enabled, we jump this check
+     */
+    ESP_GOTO_ON_FALSE(SOC_ADC_DIG_SUPPORTED_UNIT(init_config->unit_id), ESP_ERR_INVALID_ARG, err, TAG, "adc unit not supported");
+#endif
 
     unit = heap_caps_calloc(1, sizeof(adc_oneshot_unit_ctx_t), ADC_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(unit, ESP_ERR_NO_MEM, err, TAG, "no mem for unit");
@@ -89,9 +97,18 @@ esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *init_config, a
     unit->unit_id = init_config->unit_id;
     unit->ulp_mode = init_config->ulp_mode;
 
+    adc_oneshot_clk_src_t clk_src = ADC_DIGI_CLK_SRC_DEFAULT;
+    if (init_config->clk_src) {
+        clk_src = init_config->clk_src;
+    }
+    uint32_t clk_src_freq_hz = 0;
+    ESP_GOTO_ON_ERROR(clk_tree_src_get_freq_hz(clk_src, CLK_TREE_SRC_FREQ_PRECISION_CACHED, &clk_src_freq_hz), err, TAG, "clock source not supported");
+
     adc_oneshot_hal_cfg_t config = {
         .unit = init_config->unit_id,
         .work_mode = (init_config->ulp_mode == ADC_ULP_MODE_FSM) ? ADC_HAL_ULP_FSM_MODE : ADC_HAL_SINGLE_READ_MODE,
+        .clk_src = clk_src,
+        .clk_src_freq_hz = clk_src_freq_hz,
     };
     adc_oneshot_hal_init(&(unit->hal), &config);
 
@@ -105,9 +122,9 @@ esp_err_t adc_oneshot_new_unit(const adc_oneshot_unit_init_cfg_t *init_config, a
     _lock_release(&s_ctx.mutex);
 #endif
 
-    adc_power_acquire();
+    sar_periph_ctrl_adc_oneshot_power_acquire();
 
-    ESP_LOGD(TAG, "new adc unit%d is created", unit->unit_id);
+    ESP_LOGD(TAG, "new adc unit%"PRId32" is created", unit->unit_id);
     *ret_unit = unit;
     return ESP_OK;
 
@@ -193,16 +210,16 @@ esp_err_t adc_oneshot_del_unit(adc_oneshot_unit_handle_t handle)
 {
     ESP_RETURN_ON_FALSE(handle, ESP_ERR_INVALID_ARG, TAG, "invalid argument: null pointer");
     bool success_free = s_adc_unit_free(handle->unit_id);
-    ESP_RETURN_ON_FALSE(success_free, ESP_ERR_NOT_FOUND, TAG, "adc%d isn't in use", handle->unit_id + 1);
+    ESP_RETURN_ON_FALSE(success_free, ESP_ERR_NOT_FOUND, TAG, "adc%"PRId32" isn't in use", handle->unit_id + 1);
 
     _lock_acquire(&s_ctx.mutex);
     s_ctx.units[handle->unit_id] = NULL;
     _lock_release(&s_ctx.mutex);
 
-    ESP_LOGD(TAG, "adc unit%d is deleted", handle->unit_id);
+    ESP_LOGD(TAG, "adc unit%"PRId32" is deleted", handle->unit_id);
     free(handle);
 
-    adc_power_release();
+    sar_periph_ctrl_adc_oneshot_power_release();
 
 #if SOC_ADC_DIG_CTRL_SUPPORTED && !SOC_ADC_RTC_CTRL_SUPPORTED
     //To free the APB_SARADC periph if needed
@@ -218,6 +235,15 @@ esp_err_t adc_oneshot_del_unit(adc_oneshot_unit_handle_t handle)
     return ESP_OK;
 }
 
+esp_err_t adc_oneshot_get_calibrated_result(adc_oneshot_unit_handle_t handle, adc_cali_handle_t cali_handle, adc_channel_t chan, int *cali_result)
+{
+    int raw = 0;
+    ESP_RETURN_ON_ERROR(adc_oneshot_read(handle, chan, &raw), TAG, "adc oneshot read fail");
+    ESP_LOGD(TAG, "raw: 0d%d", raw);
+    ESP_RETURN_ON_ERROR(adc_cali_raw_to_voltage(cali_handle, raw, cali_result), TAG, "adc calibration fail");
+
+    return ESP_OK;
+}
 
 #define ADC_GET_IO_NUM(unit, channel) (adc_channel_io_map[unit][channel])
 

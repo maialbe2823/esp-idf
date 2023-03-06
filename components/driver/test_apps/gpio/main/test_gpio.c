@@ -622,8 +622,10 @@ TEST_CASE("GPIO_mode_test", "[gpio]")
     // Outputs high level: w/ pull up, then must read high level; w/ pull down, then must read low level
     gpio_set_level(TEST_GPIO_EXT_OUT_IO, 1);
     gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_PULLUP_ONLY);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, gpio_get_level(TEST_GPIO_EXT_IN_IO), "direction GPIO_MODE_OUTPUT_OD with GPIO_PULLUP_ONLY set error, it outputs low level");
     gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_PULLDOWN_ONLY);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, gpio_get_level(TEST_GPIO_EXT_IN_IO), "direction GPIO_MODE_OUTPUT_OD with GPIO_PULLDOWN_ONLY set error, it outputs high level");
     // Outputs low level: must read low level
     gpio_set_level(TEST_GPIO_EXT_OUT_IO, 0);
@@ -638,10 +640,12 @@ TEST_CASE("GPIO_mode_test", "[gpio]")
 #endif
     // Outputs high level: w/ pull up, then must read high level; w/ pull down, then must read low level
     gpio_set_level(TEST_GPIO_EXT_OUT_IO, 1);
-    gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_PULLUP_ONLY);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, gpio_get_level(TEST_GPIO_EXT_IN_IO), "direction GPIO_MODE_INPUT_OUTPUT_OD with GPIO_PULLUP_ONLY set error, it outputs low level");
     gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_PULLDOWN_ONLY);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, gpio_get_level(TEST_GPIO_EXT_IN_IO), "direction GPIO_MODE_INPUT_OUTPUT_OD with GPIO_PULLDOWN_ONLY set error, it outputs high level");
+    gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_PULLUP_ONLY);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, gpio_get_level(TEST_GPIO_EXT_IN_IO), "direction GPIO_MODE_INPUT_OUTPUT_OD with GPIO_PULLUP_ONLY set error, it outputs low level");
     // Outputs low level: must read low level
     gpio_set_level(TEST_GPIO_EXT_OUT_IO, 0);
     gpio_set_pull_mode(TEST_GPIO_EXT_OUT_IO, GPIO_FLOATING);
@@ -673,7 +677,7 @@ static void prompt_to_continue(const char *str)
 
 // This case needs the resistance to pull up the voltage or pull down the voltage
 // Ignored in CI because the voltage needs to be tested with multimeter
-TEST_CASE_CI_IGNORE("GPIO_verify_only_the_gpio_with_input_ability_can_be_set_pull/down", "[gpio]")
+TEST_CASE("GPIO_verify_only_the_gpio_with_input_ability_can_be_set_pull/down", "[gpio][ignore]")
 {
     gpio_config_t output_io = test_init_io(TEST_GPIO_EXT_OUT_IO);
     gpio_config_t input_io = test_init_io(TEST_GPIO_EXT_IN_IO);
@@ -764,7 +768,7 @@ static void drive_capability_set_get(gpio_num_t num, gpio_drive_cap_t capability
  *
  * all of these cases should be ignored that it will not run in CI
  */
-TEST_CASE_CI_IGNORE("GPIO_drive_capability_test", "[gpio]")
+TEST_CASE("GPIO_drive_capability_test", "[gpio][ignore]")
 {
     printf("weak capability test! please view the current change!\n");
     drive_capability_set_get(TEST_GPIO_EXT_OUT_IO, GPIO_DRIVE_CAP_0);
@@ -787,10 +791,11 @@ TEST_CASE_CI_IGNORE("GPIO_drive_capability_test", "[gpio]")
     prompt_to_continue("If this test finishes");
 }
 
+#if !CONFIG_IDF_TARGET_ESP32H2 // IDF-6845
 #if SOC_USB_SERIAL_JTAG_SUPPORTED
 TEST_CASE("GPIO_input_and_output_of_USB_pins_test", "[gpio]")
 {
-    const int test_pins[] = {USB_DM_GPIO_NUM, USB_DM_GPIO_NUM};
+    const int test_pins[] = {USB_DP_GPIO_NUM, USB_DM_GPIO_NUM};
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_INPUT_OUTPUT,
@@ -804,8 +809,8 @@ TEST_CASE("GPIO_input_and_output_of_USB_pins_test", "[gpio]")
         int pin = test_pins[i];
         // test pin
         gpio_set_level(pin, 0);
-        // tested voltage is around 0v
         esp_rom_delay_us(10);
+        // tested voltage is around 0v
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, gpio_get_level(pin), "get level error! the level should be low!");
         gpio_set_level(pin, 1);
         esp_rom_delay_us(10);
@@ -821,10 +826,29 @@ TEST_CASE("GPIO_input_and_output_of_USB_pins_test", "[gpio]")
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, gpio_get_level(pin), "get level error! the level should be high!");
     }
 }
-#endif //SOC_USB_SERIAL_JTAG_SUPPORTED
 
+TEST_CASE("GPIO_USB_DP_pin_pullup_disable_test", "[gpio]")
+{
+    // This test ensures the USB D+ pin pull-up can be disabled
+    // The pull-up value of the D+ pin is controlled by the pin's pull-up value together with the USB pull-up value.
+    // If any one of the pull-up value is 1, the pin’s pull-up resistor will be enabled.
+    // USB D+ pull-up value is default to 1 (USB_SERIAL_JTAG_DP_PULLUP)
+    // Therefore, when D+ pin's pull-up value is set to 0, it will also clear USB D+ pull-up value to allow
+    // its full functionality as a normal gpio pin
+    gpio_config_t input_io = test_init_io(USB_DP_GPIO_NUM);
+    input_io.mode = GPIO_MODE_INPUT;
+    input_io.pull_up_en = 0;
+    input_io.pull_down_en = 1;
+    gpio_config(&input_io);
+
+    TEST_ASSERT_EQUAL_INT(0, gpio_get_level(USB_DP_GPIO_NUM));
+}
+#endif //SOC_USB_SERIAL_JTAG_SUPPORTED
+#endif
+
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32H2) // TODO: IDF-6267 Remove when light sleep is supported
 // Ignored in CI because it needs manually connect TEST_GPIO_INPUT_LEVEL_LOW_PIN to 3.3v to wake up from light sleep
-TEST_CASE_CI_IGNORE("GPIO_light_sleep_wake_up_test", "[gpio]")
+TEST_CASE("GPIO_light_sleep_wake_up_test", "[gpio][ignore]")
 {
     gpio_config_t io_config = test_init_io(TEST_GPIO_INPUT_LEVEL_LOW_PIN);
     io_config.mode = GPIO_MODE_INPUT;
@@ -839,3 +863,4 @@ TEST_CASE_CI_IGNORE("GPIO_light_sleep_wake_up_test", "[gpio]")
     printf("Waked up from light sleep\n");
     TEST_ASSERT(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO);
 }
+#endif //!TEMPORARY_DISABLED_FOR_TARGETS(...)
